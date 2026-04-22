@@ -3,6 +3,10 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.0] - 22-04-2026
+
+- License changed to PolyForm Noncommercial 1.0.0
+
 ## [0.5.8] - 22-04-2026
 
 - Implemented CPU support as a fallback if no supported GPU is found.
