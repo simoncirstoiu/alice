@@ -393,7 +393,7 @@
       </div>
       <div style="text-align:right;font-family:var(--font);flex-shrink:0">
         <div style="font-size:var(--fs-sm);color:var(--t0b);font-weight:600">Developer: Simon Cirstoiu</div>
-        <div style="font-size:var(--fs-xs);color:var(--t2);margin-top:4px">Licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener" style="color:var(--ac);text-decoration:none">CC BY-NC 4.0</a></div>
+        <div style="font-size:var(--fs-xs);color:var(--t2);margin-top:4px">Licensed under <a href="https://polyformproject.org/licenses/noncommercial/1.0.0/" target="_blank" rel="noopener" style="color:var(--ac);text-decoration:none">PolyForm Noncommercial 1.0.0</a></div>
       </div>
     </div>
 
