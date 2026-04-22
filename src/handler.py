@@ -19,14 +19,14 @@ from .handler_api import (
     _get_api_trainer_status, _get_api_trainer_logs,
     _get_api_version, _get_api_gpu, _get_api_ai_status,
     _get_api_deps_check, _get_api_deps_status, _get_api_deps_python,
-    _get_api_ui_state,
+    _get_api_ui_state, _get_api_device_detect,
     _post_save, _post_del, _post_ai, _post_preview_ai,
     _post_live_ai, _post_video_ai, _post_video_export,
     _post_copymove, _post_switch, _post_populate_labels,
     _post_settings_save,
     _post_deps_install_one, _post_deps_install,
     _post_models_download,
-    _post_first_run_dismiss, _post_ui_state,
+    _post_first_run_dismiss, _post_ui_state, _post_device_set,
 )
 from .handler_trainer import (
     _post_trainer_stop,
@@ -77,6 +77,7 @@ GET_ROUTES: dict[str, callable] = {
     "/api/deps/check":       _get_api_deps_check,
     "/api/deps/status":      _get_api_deps_status,
     "/api/deps/python":      _get_api_deps_python,
+    "/api/device/detect":    _get_api_device_detect,
     "/api/ui/state":         _get_api_ui_state,
 }
 
@@ -116,6 +117,7 @@ POST_ROUTES: list[tuple[str, callable]] = [
     ("/api/trainer/train",          _post_trainer_train),
     ("/api/trainer/onnx",           _post_trainer_onnx),
     ("/api/first-run/dismiss",      _post_first_run_dismiss),
+    ("/api/device/set",             _post_device_set),
     ("/api/ui/state",               _post_ui_state),
 ]
 

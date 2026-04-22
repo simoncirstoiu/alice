@@ -39,7 +39,7 @@ function setSettingsTab(tab) {
   document.querySelectorAll('.settings-panel').forEach(el => {
     el.classList.toggle('active', el.id === 'stab-' + tab);
   });
-  if (tab === 'system') { loadDependencies(); loadPythonInfo(); }
+  if (tab === 'system') { loadDependencies(); loadPythonInfo(); loadDeviceSettings(); }
 }
 
 // ============================================================
@@ -202,7 +202,15 @@ function showWelcome() {
       <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px">
 
         <div style="padding:var(--pad-lg);border-radius:10px;background:var(--bg2);border:1px solid var(--bd)">
-          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">1. Configure Paths</div>
+          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">1. Hardware Detected</div>
+          <div id="welcomeDeviceInfo" style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;font-family:var(--font)">Detecting...</div>
+          <div style="font-size:var(--fs-xs);color:var(--t3);margin-top:6px;font-family:var(--fontUI)">
+            You can change this later in <strong style="color:var(--t2);cursor:pointer" onclick="dismissWelcome();switchPage('settings');setTimeout(()=>setSettingsTab('system'),200)">Settings → System</strong>
+          </div>
+        </div>
+
+        <div style="padding:var(--pad-lg);border-radius:10px;background:var(--bg2);border:1px solid var(--bd)">
+          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">2. Configure Paths</div>
           <div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;font-family:var(--fontUI)">
             Open <strong style="color:var(--ac);cursor:pointer" onclick="dismissWelcome();switchPage('settings')">Settings</strong> and set up your paths:
           </div>
@@ -214,7 +222,7 @@ function showWelcome() {
         </div>
 
         <div style="padding:var(--pad-lg);border-radius:10px;background:var(--bg2);border:1px solid var(--bd)">
-          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">2. Download a YOLO Model</div>
+          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">3. Download a YOLO Model</div>
           <div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;font-family:var(--fontUI);margin-bottom:10px">
             You need at least one model for AI detection. Pick one to download now:
           </div>
@@ -225,7 +233,7 @@ function showWelcome() {
         </div>
 
         <div style="padding:var(--pad-lg);border-radius:10px;background:var(--bg2);border:1px solid var(--bd)">
-          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">3. Build Your Dataset</div>
+          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">4. Build Your Dataset</div>
           <div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;font-family:var(--fontUI)">
             Use <strong>Live mode</strong> to browse Frigate snapshots and transfer them to your dataset.
             Or use the <strong style="color:var(--ac);cursor:pointer" onclick="dismissWelcome();switchPage('trainer')">Trainer</strong>
@@ -234,7 +242,7 @@ function showWelcome() {
         </div>
 
         <div style="padding:var(--pad-lg);border-radius:10px;background:var(--bg2);border:1px solid var(--bd)">
-          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">4. Dependencies</div>
+          <div style="font-size:var(--fs-base);font-weight:600;color:var(--t0b);margin-bottom:6px;font-family:var(--fontUI)">5. Dependencies</div>
           <div style="font-size:var(--fs-sm);color:var(--t1);line-height:1.6;font-family:var(--fontUI)">
             Some features require extra packages (ultralytics, opencv, numpy).
           </div>
@@ -253,6 +261,7 @@ function showWelcome() {
     </div>`;
 
   document.body.appendChild(overlay);
+  welcomeDetectDevice();
   welcomeCheckDeps();
 }
 
@@ -384,5 +393,86 @@ function welcomeDownloadModel(filename, btn) {
     if (status) status.innerHTML = `<span style="color:var(--acr)">✗ ${e.message}</span>`;
     btn.disabled = false;
     btn.textContent = 'Retry';
+  });
+}
+
+// ============================================================
+// DEVICE DETECTION (welcome + settings)
+// ============================================================
+
+function welcomeDetectDevice() {
+  const el = document.getElementById('welcomeDeviceInfo');
+  if (!el) return;
+  if (typeof DEVICE_INFO !== 'undefined' && DEVICE_INFO.effective) {
+    _renderDeviceInfo(el, DEVICE_INFO);
+    return;
+  }
+  fetch('/api/device/detect').then(r => r.json()).then(d => {
+    _renderDeviceInfo(el, d);
+  }).catch(() => {
+    el.innerHTML = '<span style="color:var(--t3)">Could not detect hardware</span>';
+  });
+}
+
+function _renderDeviceInfo(el, d) {
+  if (d.effective === 'nvidia') {
+    const name = (d.info || d.detected || {}).gpu_name || 'NVIDIA GPU';
+    const cuda = (d.info || d.detected || {}).cuda_version || '?';
+    const vram = (d.info || d.detected || {}).vram_mb || '?';
+    el.innerHTML = '<span style="color:var(--acg)">&#10003; ' + name + '</span>' +
+      '<br><span style="color:var(--t2)">CUDA ' + cuda + ' &middot; ' + vram + ' MiB VRAM</span>' +
+      '<br><span style="color:var(--t2)">Training and inference will use GPU acceleration.</span>';
+  } else {
+    el.innerHTML = '<span style="color:var(--acy)">No NVIDIA GPU detected &mdash; CPU mode</span>' +
+      '<br><span style="color:var(--t2)">Training and inference will run on CPU (slower but functional).</span>';
+  }
+}
+
+function loadDeviceSettings() {
+  fetch('/api/device/detect').then(r => r.json()).then(d => {
+    const el = document.getElementById('deviceSettingsContainer');
+    if (!el) return;
+    const confVal = d.conf || 'auto';
+    const eff = d.effective || 'cpu';
+    const det = d.detected || {};
+    let detectedHtml = '';
+    if (det.type === 'nvidia') {
+      detectedHtml = '<span style="color:var(--acg)">&#10003; ' + (det.gpu_name || 'NVIDIA GPU') + '</span> &middot; CUDA ' + (det.cuda_version || '?') + ' &middot; ' + (det.vram_mb || '?') + ' MiB';
+    } else {
+      detectedHtml = '<span style="color:var(--acy)">No NVIDIA GPU detected</span>';
+    }
+    el.innerHTML = '<div style="font-size:var(--fs-sm);color:var(--t1);margin-bottom:12px;line-height:1.6">' +
+      '<strong>Detected:</strong> ' + detectedHtml + '<br>' +
+      '<strong>Active mode:</strong> <span style="color:var(--t0b)">' + (eff === 'nvidia' ? 'NVIDIA GPU' : 'CPU') + '</span></div>' +
+      '<div style="display:flex;align-items:center;gap:12px">' +
+      '<label style="font-size:var(--fs-sm);color:var(--t1);font-family:var(--fontUI)">Device:</label>' +
+      '<select class="sel" id="deviceSelect" onchange="setDevice(this.value)" style="min-width:160px">' +
+      '<option value="auto"' + (confVal === 'auto' ? ' selected' : '') + '>Auto (detect at startup)</option>' +
+      '<option value="nvidia"' + (confVal === 'nvidia' ? ' selected' : '') + '>NVIDIA GPU</option>' +
+      '<option value="cpu"' + (confVal === 'cpu' ? ' selected' : '') + '>CPU</option>' +
+      '</select></div>' +
+      '<div id="deviceChangeStatus" style="font-size:var(--fs-sm);margin-top:8px;display:none"></div>';
+  });
+}
+
+function setDevice(value) {
+  const status = document.getElementById('deviceChangeStatus');
+  fetch('/api/device/set', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ device: value })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      if (status) {
+        status.style.display = '';
+        status.innerHTML = '<span style="color:var(--acg)">&#10003; Device set to ' + value + ' (effective: ' + d.effective + ')</span>' +
+          '<br><span style="color:var(--acy)">Dependencies may need reinstalling for the new device profile.</span>';
+      }
+      setTimeout(loadDependencies, 500);
+    } else {
+      if (status) { status.style.display = ''; status.innerHTML = '<span style="color:var(--acr)">&#10007; ' + d.error + '</span>'; }
+    }
+  }).catch(e => {
+    if (status) { status.style.display = ''; status.innerHTML = '<span style="color:var(--acr)">&#10007; ' + e.message + '</span>'; }
   });
 }

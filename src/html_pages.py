@@ -120,7 +120,7 @@
     <span id="trainerToolbarTitle" style="font-size:var(--fs-lg);font-weight:700;color:var(--t0b);font-family:var(--fontUI)"></span>
     <div class="toolbar-spacer"></div>
     <button class="btn filter active" data-ttab="config" onclick="setTrainerTab('config')">Config</button>
-    <button class="btn filter" data-ttab="gpu" onclick="setTrainerTab('gpu')">nvidia-smi</button>
+    <button class="btn filter" data-ttab="gpu" onclick="setTrainerTab('gpu')">Device</button>
     <button class="btn filter" data-ttab="logs" onclick="setTrainerTab('logs')">Logs</button>
   </div>
 
@@ -339,6 +339,13 @@
 
     <!-- TAB: System (Dependencies) -->
     <div class="settings-panel" id="stab-system">
+      <div class="settings-card">
+        <h3>Device</h3>
+        <div style="font-size:var(--fs-base);color:var(--t2);margin-bottom:16px;line-height:1.6">
+          Compute device for training and inference. Changing this affects which dependencies are installed.
+        </div>
+        <div id="deviceSettingsContainer"><div style="color:var(--t2);font-size:var(--fs-sm)">Loading...</div></div>
+      </div>
       <div class="settings-card">
         <h3>Dependencies</h3>
         <div style="font-size:var(--fs-base);color:var(--t2);margin-bottom:16px;line-height:1.6">

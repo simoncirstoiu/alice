@@ -73,7 +73,7 @@ const _STEP_TITLES = ['Export Dataset', 'Deduplication', 'Annotate', 'Train', 'O
 function _updateTrainerToolbarTitle() {
   const el = document.getElementById('trainerToolbarTitle');
   if (!el) return;
-  if (trainerTab === 'gpu') el.textContent = 'GPU Status';
+  if (trainerTab === 'gpu') el.textContent = 'Device Status';
   else if (trainerTab === 'logs') el.textContent = 'Training Logs';
   else el.textContent = _STEP_TITLES[trainerStep] || 'Config';
 }
@@ -406,7 +406,7 @@ function renderOnnxStep() {
 
   <div style="display:flex;gap:20px;margin-bottom:24px">
     <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Run onnx-simplifier to optimize the graph. Reduces model size and improves inference speed."><input type="checkbox" id="onnxSimplify" checked style="accent-color:var(--ac);width:15px;height:15px">Simplify</label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Export weights as 16-bit float. Halves model size with minimal accuracy loss. Required for TensorRT FP16."><input type="checkbox" id="onnxHalf" checked style="accent-color:var(--ac);width:15px;height:15px">FP16</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Export weights as 16-bit float. Halves model size with minimal accuracy loss. Required for TensorRT FP16."><input type="checkbox" id="onnxHalf" ${DEVICE_INFO.effective === 'nvidia' ? 'checked' : 'disabled'} style="accent-color:var(--ac);width:15px;height:15px">FP16${DEVICE_INFO.effective !== 'nvidia' ? ' <span style="font-size:var(--fs-xs);color:var(--t3)">(GPU only)</span>' : ''}</label>
     <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Allow dynamic batch size and input dimensions. Disable for fixed-size TensorRT engines."><input type="checkbox" id="onnxDynamic" style="accent-color:var(--ac);width:15px;height:15px">Dynamic</label>
   </div>
 
@@ -426,7 +426,7 @@ function renderGpuTab() {
   fetchGpuInfo();
   gpuTimer = setInterval(fetchGpuInfo, 3000);
 
-  return `<div class="gpu-terminal" id="gpuOutput">Fetching nvidia-smi...</div>
+  return `<div class="gpu-terminal" id="gpuOutput">Fetching device info...</div>
   <div class="gpu-cards" id="gpuCards"></div>
   <div class="text-sm text-t2 font-ui" style="margin-top:10px">Auto-refreshes every 3 seconds</div>`;
 }
@@ -436,7 +436,18 @@ function fetchGpuInfo() {
     const el = document.getElementById('gpuOutput');
     const cards = document.getElementById('gpuCards');
     if (!el) { if (gpuTimer) { clearInterval(gpuTimer); gpuTimer = null; } return; }
-    if (d.ok) {
+    if (d.mode === 'cpu') {
+      el.textContent = d.output || 'Running in CPU mode.';
+      if (cards) {
+        const items = [];
+        if (d.load) items.push({ label: 'Load Avg', value: d.load, color: '#3b82f6' });
+        if (d.mem_used && d.mem_total) items.push({ label: 'Memory', value: d.mem_used + '/' + d.mem_total + ' MiB', color: '#06b6d4' });
+        if (d.cores) items.push({ label: 'CPU Cores', value: d.cores, color: '#e4e4ec' });
+        if (d.temp) items.push({ label: 'Temperature', value: d.temp + '°C', color: '#22c55e' });
+        if (items.length === 0) items.push({ label: 'Active Device', value: 'CPU', color: '#eab308' });
+        cards.innerHTML = items.map(c => `<div class="gpu-card"><div class="gpu-card-val" style="color:${c.color}">${c.value}</div><div class="gpu-card-label">${c.label}</div></div>`).join('');
+      }
+    } else if (d.ok) {
       el.textContent = d.output;
       if (cards && d.temp !== undefined) {
         cards.innerHTML = [
@@ -447,12 +458,12 @@ function fetchGpuInfo() {
         ].map(c => `<div class="gpu-card"><div class="gpu-card-val" style="color:${c.color}">${c.value}</div><div class="gpu-card-label">${c.label}</div></div>`).join('');
       }
     } else {
-      el.textContent = d.error || 'nvidia-smi not available';
+      el.textContent = d.error || 'Device info not available';
       if (cards) cards.innerHTML = '';
     }
   }).catch(() => {
     const el = document.getElementById('gpuOutput');
-    if (el) el.textContent = 'Failed to fetch GPU info';
+    if (el) el.textContent = 'Failed to fetch device info';
   });
 }
 
@@ -503,7 +514,23 @@ function resetLogs() {
 function copyLogs() {
   const el = document.getElementById('logsOutput');
   if (!el) return;
-  navigator.clipboard.writeText(el.textContent).then(() => toast('Logs copied')).catch(() => toast('Copy failed', true));
+  const text = el.textContent;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => toast('Logs copied')).catch(() => _copyFallback(text));
+  } else {
+    _copyFallback(text);
+  }
+}
+
+function _copyFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); toast('Logs copied'); }
+  catch(e) { toast('Copy failed', true); }
+  document.body.removeChild(ta);
 }
 
 // Trainer actions (API calls)

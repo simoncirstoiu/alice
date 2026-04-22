@@ -27,7 +27,7 @@ from urllib.parse import unquote, parse_qs
 from collections import defaultdict, deque
 from typing import Any, Optional
 
-VERSION = "0.5.7"
+VERSION = "0.5.8"
 
 # ============================================================
 # CONFIGURATION DEFAULTS
@@ -59,6 +59,8 @@ CONF_DEFAULTS = {
     "IMAGE_SIZE": 640,
     "FREEZE_LAYERS": 10,
     "AUGMENTATION": False,
+    # Device
+    "DEVICE": "auto",
     # Interface
     "HELPERS_ENABLED": True,
     "SORT_ORDER": "modified",
@@ -99,19 +101,125 @@ CLASS_NAMES = {
 REVERSE_CLASS_NAMES = {v: k for k, v in CLASS_NAMES.items()}
 
 # ============================================================
+# DEVICE DETECTION & PROFILES
+# ============================================================
+
+def detect_device() -> dict:
+    """Detect available compute device. Returns dict with type, gpu_name, cuda_version."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,driver_version,memory.total",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=8
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            parts = result.stdout.strip().split(",")
+            gpu_name = parts[0].strip() if len(parts) >= 1 else "NVIDIA GPU"
+            driver = parts[1].strip() if len(parts) >= 2 else "?"
+            vram = parts[2].strip() if len(parts) >= 3 else "?"
+            cuda_ver = ""
+            try:
+                r2 = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=8)
+                for line in r2.stdout.split("\n"):
+                    if "CUDA Version" in line:
+                        import re as _re
+                        m = _re.search(r'CUDA Version:\s*([\d.]+)', line)
+                        if m:
+                            cuda_ver = m.group(1)
+                        break
+            except Exception:
+                pass
+            return {
+                "type": "nvidia", "gpu_name": gpu_name, "driver": driver,
+                "vram_mb": vram, "cuda_version": cuda_ver,
+            }
+    except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+        pass
+    return {"type": "cpu", "gpu_name": "", "driver": "", "vram_mb": "", "cuda_version": ""}
+
+
+def resolve_device() -> str:
+    """Resolve DEVICE config to effective device type ('nvidia' or 'cpu')."""
+    dev = CONF.get("DEVICE", CONF_DEFAULTS["DEVICE"]).lower().strip()
+    if dev == "nvidia":
+        return "nvidia"
+    if dev == "cpu":
+        return "cpu"
+    return detect_device()["type"]
+
+
+def _cuda_wheel_tag(cuda_version: str) -> str:
+    """Map CUDA version string (e.g. '12.8') to PyTorch wheel tag (e.g. 'cu128')."""
+    available = ["cu126", "cu128", "cu130"]
+    if not cuda_version:
+        return available[0]
+    parts = cuda_version.split(".")
+    major = parts[0] if parts else "12"
+    minor = parts[1] if len(parts) > 1 else "6"
+    tag = f"cu{major}{minor}"
+    if tag in available:
+        return tag
+    try:
+        target = int(major) * 10 + int(minor)
+        best = min(available, key=lambda t: abs(int(t[2:]) - target))
+        return best
+    except (ValueError, IndexError):
+        return available[0]
+
+
+def get_torch_index_url(device_type: str, cuda_version: str = "") -> str:
+    """Get the pip --index-url for torch based on device type."""
+    if device_type == "nvidia":
+        tag = _cuda_wheel_tag(cuda_version)
+        return f"https://download.pytorch.org/whl/{tag}"
+    return "https://download.pytorch.org/whl/cpu"
+
+
+# ============================================================
 # DEPENDENCY DEFINITIONS
 # ============================================================
 
-DEPENDENCIES = [
+_BASE_DEPENDENCIES = [
     {"name": "Pillow", "import": "PIL", "pip": "Pillow", "required": True, "desc": "Image processing (pHash, format conversion)"},
     {"name": "NumPy", "import": "numpy", "pip": "numpy", "required": False, "desc": "Numerical operations for dedup"},
     {"name": "inotify", "import": "inotify", "pip": "inotify", "required": False, "desc": "Filesystem change watching (Linux)"},
     {"name": "OpenCV", "import": "cv2", "pip": "opencv-python-headless", "required": False, "desc": "Video frame extraction & processing"},
     {"name": "ONNX", "import": "onnx", "pip": "onnx", "required": False, "desc": "ONNX model format for export"},
     {"name": "onnxslim", "import": "onnxslim", "pip": "onnxslim", "required": False, "desc": "ONNX model optimization & slimming"},
-    {"name": "onnxruntime", "import": "onnxruntime", "pip": "onnxruntime-gpu", "required": False, "desc": "ONNX Runtime with GPU support"},
-    {"name": "ultralytics", "import": "ultralytics", "pip": "ultralytics", "required": False, "desc": "YOLO model training & inference"},
 ]
+
+def get_dependencies(device_type: str = None) -> list[dict]:
+    """Return dependency list appropriate for the given device type."""
+    if device_type is None:
+        device_type = resolve_device()
+    deps = list(_BASE_DEPENDENCIES)
+
+    # onnxruntime — depends on ONNX, variant depends on device
+    if device_type == "nvidia":
+        deps.append({"name": "onnxruntime", "import": "onnxruntime", "pip": "onnxruntime-gpu", "required": False, "desc": "ONNX Runtime with GPU acceleration"})
+    else:
+        deps.append({"name": "onnxruntime", "import": "onnxruntime", "pip": "onnxruntime", "required": False, "desc": "ONNX Runtime (CPU)"})
+
+    # PyTorch — needs special index URL based on device
+    cuda_ver = ""
+    if device_type == "nvidia":
+        try:
+            info = detect_device()
+            cuda_ver = info.get("cuda_version", "")
+        except Exception:
+            pass
+    torch_index = get_torch_index_url(device_type, cuda_ver)
+    deps.append({"name": "PyTorch", "import": "torch", "pip": "torch torchvision", "required": False,
+                 "desc": "Deep learning framework for training & inference", "index_url": torch_index})
+
+    # ultralytics — depends on PyTorch, must be last
+    deps.append({"name": "ultralytics", "import": "ultralytics", "pip": "ultralytics", "required": False, "desc": "YOLO model training & inference"})
+
+    return deps
+
+
+# Back-compat: modules that import DEPENDENCIES get the current resolved list
+DEPENDENCIES = get_dependencies("nvidia")  # placeholder, refreshed at startup
 
 # ============================================================
 # GLOBAL STATE

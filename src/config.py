@@ -4,7 +4,7 @@
 
 import os
 
-from .header import CONF_DEFAULTS, DEPENDENCIES
+from .header import CONF_DEFAULTS, get_dependencies
 
 def _parse_value(raw):
     """Auto-detect type from string value."""
@@ -119,6 +119,10 @@ def generate_default_conf(path):
         ("EPOCHS", None), ("BATCH_SIZE", None), ("LEARNING_RATE", None),
         ("LR_FINAL", None), ("IMAGE_SIZE", None), ("FREEZE_LAYERS", None),
         ("", None),
+        ("# === Device ===", None),
+        ("# auto = detect at startup, nvidia = force GPU, cpu = force CPU", None),
+        ("DEVICE", None),
+        ("", None),
         ("# === Interface ===", None),
         ("HELPERS_ENABLED", None), ("SORT_ORDER", None), ("WELCOME_DISMISSED", None),
         ("", None),
@@ -137,11 +141,12 @@ def generate_default_conf(path):
         f.write("\n".join(lines) + "\n")
 
 
-def check_dependencies():
+def check_dependencies(device_type=None):
     """Check which dependencies are installed. Returns list of dicts."""
     import importlib
+    deps = get_dependencies(device_type)
     results = []
-    for dep in DEPENDENCIES:
+    for dep in deps:
         try:
             importlib.invalidate_caches()
             importlib.import_module(dep["import"])

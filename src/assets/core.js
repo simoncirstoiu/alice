@@ -5,6 +5,7 @@ const CN = %%CLASS_NAMES_JS%%;          // {0:"person", 1:"bicycle", ...}
 const CONF = %%CONF_JS%%;               // full config from alice.conf
 const DEFAULT_CLASSES = %%DEFAULT_CLASSES_JS%%;
 const FIRST_RUN = %%FIRST_RUN%%;
+const DEVICE_INFO = %%DEVICE_INFO%%;
 const UI_STATE = %%UI_STATE_JS%%;       // server-side UI state
 
 // Fire-and-forget: persist UI state to server
@@ -258,7 +259,21 @@ function updateSidebarGpu() {
     const dot = document.getElementById('gpuDot');
     const details = document.getElementById('gpuDetails');
     if (!nameEl) return;
-    if (d.ok && d.temp) {
+    if (d.mode === 'cpu') {
+      nameEl.textContent = d.gpu_name || 'CPU Mode';
+      if (dot) dot.style.background = 'var(--acy)';
+      if (details) {
+        details.style.display = '';
+        const t = document.getElementById('gpuDetTemp');
+        const v = document.getElementById('gpuDetVram');
+        const p = document.getElementById('gpuDetPower');
+        const u = document.getElementById('gpuDetUtil');
+        if (t) t.textContent = d.temp ? d.temp + '°C' : '-';
+        if (v) v.textContent = d.mem_used && d.mem_total ? d.mem_used + '/' + d.mem_total + ' MiB' : '-';
+        if (p) p.textContent = d.cores ? d.cores + ' cores' : '-';
+        if (u) u.textContent = d.load ? d.load : '-';
+      }
+    } else if (d.ok && d.temp) {
       nameEl.textContent = d.gpu_name || 'GPU';
       if (dot) dot.style.background = 'var(--acg)';
       if (details) {

@@ -9,9 +9,10 @@ import threading
 from http.server import HTTPServer
 
 from .header import (
-    ALICE_DIR, CONF, CONF_DEFAULTS, STATE,
+    ALICE_DIR, CONF, CONF_DEFAULTS, DEPENDENCIES, STATE,
     IMAGE_LIST, LIVE_CAMERAS, LIVE_LIST,
     MODELS_LIST, VERSION, VIDEO_LIST,
+    detect_device, get_dependencies, resolve_device,
 )
 from .config import check_dependencies, generate_default_conf, load_conf
 from .core import build_image_list, scan_live_images, scan_models, scan_video_exports, sort_image_list, start_watchers
@@ -96,6 +97,17 @@ if __name__ == "__main__":
         print(f"  Python: {sys.executable} (venv)")
     print(f"  Config: {os.path.abspath(STATE['CONF_PATH'])}")
     print(f"  Dataset: {STATE['DATASET_DIR']}")
+
+    # Detect device and refresh dependencies
+    dev_info = detect_device()
+    effective = resolve_device()
+    DEPENDENCIES[:] = get_dependencies(effective)
+    STATE["DEVICE_INFO"] = dev_info
+    STATE["DEVICE_EFFECTIVE"] = effective
+    if effective == "nvidia":
+        print(f"  Device: {dev_info.get('gpu_name', 'NVIDIA GPU')} (CUDA {dev_info.get('cuda_version', '?')})")
+    else:
+        print(f"  Device: CPU")
 
     IMAGE_LIST.clear(); IMAGE_LIST.extend(build_image_list())
     sort_image_list()

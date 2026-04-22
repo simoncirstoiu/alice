@@ -15,6 +15,7 @@ from .header import (
     IMAGE_LIST, LIVE_ALL, LIVE_CAMERAS, LIVE_LIST, MODELS_LIST,
     PHASH_CACHE, STATE, STEP_STATUS, TRAINER_LOG,
     VERSION, VIDEO_LIST, _state_lock, conf, validate_path,
+    detect_device, get_dependencies, get_torch_index_url, resolve_device,
 )
 from .config import _parse_value, check_dependencies, save_conf
 from .core import (
@@ -93,6 +94,11 @@ def _get_index(params: dict) -> tuple[int, str, bytes]:
     html = html.replace("%%FIRST_RUN%%", json.dumps(
         STATE["FIRST_RUN"] and not conf("WELCOME_DISMISSED")
     ))
+    html = html.replace("%%DEVICE_INFO%%", json.dumps({
+        "effective": STATE.get("DEVICE_EFFECTIVE", "cpu"),
+        "info": STATE.get("DEVICE_INFO", {}),
+        "conf": conf("DEVICE"),
+    }))
     html = html.replace("%%UI_STATE_JS%%", json.dumps(STATE["UI_STATE"]))
 
     return 200, "text/html", html.encode()
@@ -339,13 +345,57 @@ def _get_api_version(params: dict) -> tuple[int, str, bytes]:
 
 def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
     global _gpu_cache, _gpu_cache_time
+    effective = STATE.get("DEVICE_EFFECTIVE", "cpu")
+    if effective != "nvidia":
+        data = {"ok": True, "mode": "cpu"}
+        try:
+            # CPU name
+            cpu_name = ""
+            with open("/proc/cpuinfo") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        cpu_name = line.split(":", 1)[1].strip()
+                        break
+            data["gpu_name"] = cpu_name or "CPU"
+            data["cores"] = str(os.cpu_count() or "?")
+            # Load average
+            load1, load5, load15 = os.getloadavg()
+            data["load"] = f"{load1:.1f}"
+            # Memory from /proc/meminfo
+            meminfo = {}
+            with open("/proc/meminfo") as f:
+                for line in f:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        meminfo[parts[0].rstrip(":")] = int(parts[1])
+            mem_total = meminfo.get("MemTotal", 0) // 1024
+            mem_avail = meminfo.get("MemAvailable", 0) // 1024
+            mem_used = mem_total - mem_avail
+            data["mem_used"] = str(mem_used)
+            data["mem_total"] = str(mem_total)
+            # Temperature (best effort)
+            try:
+                with open("/sys/class/thermal/thermal_zone0/temp") as f:
+                    data["temp"] = str(int(f.read().strip()) // 1000)
+            except Exception:
+                pass
+            # Build output text
+            lines = [f"CPU: {data['gpu_name']}", f"Cores: {data['cores']}", f"Load: {data['load']}"]
+            lines.append(f"Memory: {mem_used} / {mem_total} MiB")
+            if data.get("temp"):
+                lines.append(f"Temp: {data['temp']}°C")
+            data["output"] = "\n".join(lines)
+        except Exception:
+            data["gpu_name"] = "CPU"
+            data["output"] = "Running in CPU mode."
+        return _json_ok(data)
     now = time.time()
     if _gpu_cache and (now - _gpu_cache_time) < 4:
         return _json_ok(_gpu_cache)
     try:
         result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=8)
         output = result.stdout.strip()
-        data = {"ok": True, "output": output}
+        data = {"ok": True, "mode": "nvidia", "output": output}
         try:
             qresult = subprocess.run(
                 ["nvidia-smi", "--query-gpu=temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,name",
@@ -367,13 +417,24 @@ def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
         _gpu_cache_time = now
         return _json_ok(data)
     except FileNotFoundError:
-        return _json_err("nvidia-smi not found")
+        return _json_ok({"ok": True, "mode": "cpu", "gpu_name": "CPU Mode", "output": "nvidia-smi not found — running in CPU mode."})
     except subprocess.TimeoutExpired:
         if _gpu_cache:
             return _json_ok({**_gpu_cache, "cached": True})
         return _json_err("nvidia-smi timeout")
     except Exception as e:
         return _json_err(str(e))
+
+
+def _get_api_device_detect(params: dict) -> tuple[int, str, bytes]:
+    info = detect_device()
+    effective = resolve_device()
+    return _json_ok({
+        "ok": True,
+        "detected": info,
+        "effective": effective,
+        "conf": conf("DEVICE"),
+    })
 
 
 def _get_api_ai_status(params: dict) -> tuple[int, str, bytes]:
@@ -425,14 +486,18 @@ def _post_deps_install_one(body: dict) -> tuple[int, str, bytes]:
     pkg_name = body.get("name", pkg_pip)
     if not pkg_pip:
         return _json_err("No package specified")
-    allowed_pips = {d["pip"] for d in DEPENDENCIES}
+    current_deps = get_dependencies()
+    allowed_pips = {d["pip"] for d in current_deps}
     if pkg_pip not in allowed_pips:
         return _json_err(f"Package not allowed: {pkg_pip}")
+    dep = next((d for d in current_deps if d["pip"] == pkg_pip), {})
     try:
-        result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", pkg_pip],
-            capture_output=True, text=True, timeout=300
-        )
+        cmd = [sys.executable, "-m", "pip", "install"]
+        if dep.get("index_url"):
+            cmd += ["--index-url", dep["index_url"]]
+        cmd += pkg_pip.split()
+        timeout = 600 if dep.get("index_url") else 300
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
         if result.returncode == 0:
             return _json_ok({"ok": True, "name": pkg_name})
         return _json_err(result.stderr[:300])
@@ -444,7 +509,8 @@ def _post_deps_install(body: dict) -> tuple[int, str, bytes]:
     if DEPS_STATUS["running"]:
         return _json_ok({"ok": True, "message": "Already installing"})
 
-    deps = check_dependencies()
+    effective = STATE.get("DEVICE_EFFECTIVE", resolve_device())
+    deps = check_dependencies(effective)
     missing = [d for d in deps if not d["installed"]]
     if not missing:
         return _json_ok({"ok": True, "installed": [], "message": "All dependencies already installed"})
@@ -462,10 +528,12 @@ def _post_deps_install(body: dict) -> tuple[int, str, bytes]:
                 break
             DEPS_STATUS["current"] = d["name"]
             try:
-                result = subprocess.run(
-                    [sys.executable, "-m", "pip", "install", d["pip"]],
-                    capture_output=True, text=True, timeout=300
-                )
+                cmd = [sys.executable, "-m", "pip", "install"]
+                if d.get("index_url"):
+                    cmd += ["--index-url", d["index_url"]]
+                cmd += d["pip"].split()
+                timeout = 600 if d.get("index_url") else 300
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
                 if result.returncode == 0:
                     DEPS_STATUS["installed"].append(d["name"])
                 else:
@@ -473,6 +541,17 @@ def _post_deps_install(body: dict) -> tuple[int, str, bytes]:
             except Exception as e:
                 DEPS_STATUS["errors"].append(f"{d['name']}: {str(e)}")
             DEPS_STATUS["done"] += 1
+
+        # ultralytics pulls opencv-python (needs libGL) over opencv-python-headless.
+        # Fix: force headless variant after all installs complete.
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "opencv-python"],
+                           capture_output=True, text=True, timeout=60)
+            subprocess.run([sys.executable, "-m", "pip", "install", "--force-reinstall", "opencv-python-headless"],
+                           capture_output=True, text=True, timeout=120)
+        except Exception:
+            pass
+
         DEPS_STATUS["running"] = False
         DEPS_STATUS["current"] = ""
 
@@ -692,20 +771,37 @@ def _post_populate_labels(body: dict) -> tuple[int, str, bytes]:
 
 
 def _post_settings_save(body: dict) -> tuple[int, str, bytes]:
+    old_live = CONF.get("LIVE_DIR", "")
+    old_exports = CONF.get("EXPORTS_DIR", "")
+    old_models = CONF.get("MODELS_DIR", "")
     for key, val in body.items():
         CONF[key] = _parse_value(str(val)) if isinstance(val, str) else val
     save_conf(STATE["CONF_PATH"], CONF)
-    # Rescan immediately when relevant paths change
-    if "LIVE_DIR" in body:
+    # Rescan only when paths actually changed
+    if CONF.get("LIVE_DIR", "") != old_live:
         scan_live_images("all", 24)
-    if "EXPORTS_DIR" in body:
+    if CONF.get("EXPORTS_DIR", "") != old_exports:
         scan_video_exports()
-    if "MODELS_DIR" in body:
+    if CONF.get("MODELS_DIR", "") != old_models:
         with _state_lock:
             MODELS_LIST.clear(); MODELS_LIST.extend(scan_models())
     return _json_ok({"ok": True, "conf": CONF, "cameras": LIVE_CAMERAS})
 
 
+
+
+def _post_device_set(body: dict) -> tuple[int, str, bytes]:
+    """Change device setting and refresh deps list."""
+    device = body.get("device", "auto").lower().strip()
+    if device not in ("auto", "nvidia", "cpu"):
+        return _json_err(f"Invalid device: {device}")
+    CONF["DEVICE"] = device
+    save_conf(STATE["CONF_PATH"], CONF)
+    effective = resolve_device()
+    STATE["DEVICE_EFFECTIVE"] = effective
+    STATE["DEVICE_INFO"] = detect_device()
+    DEPENDENCIES[:] = get_dependencies(effective)
+    return _json_ok({"ok": True, "device": device, "effective": effective})
 
 
 def _post_first_run_dismiss(body: dict) -> tuple[int, str, bytes]:

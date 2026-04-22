@@ -13,6 +13,10 @@
 
 ---
 
+> **Works on both NVIDIA GPU and CPU.** 
+
+ALICE automatically detects your hardware — if no compatible GPU is found, it falls back to CPU mode. No manual configuration needed.
+
 ![Viewer — AI Detection](screenshots/viewer.png)
 
 ## Why?
@@ -25,18 +29,15 @@ If you find it useful — enjoy. If not, well... cry me a river! :)
 
 ```bash
 # Build and set up virtual environment
-
 python3 builder.py
-
-On Debian/Ubuntu, you may also need: `sudo apt install python3-venv`
 
 # Run
 ./alice.py
 ```
 
-The builder assembles `alice.py` from source modules, creates a `.venv` with base dependencies, and patches the shebang so `./alice.py` uses the venv automatically.
+The builder assembles `alice.py` from source modules, creates a `.venv` with base dependencies, and patches the shebang so `./alice.py` uses the venv automatically. On Debian/Ubuntu, the builder will auto-install `python3-venv` if missing.
 
-On first run, `alice.conf` is generated with sensible defaults. Models and datasets directories are created next to `alice.py`. Open **http://localhost:8080** and you're ready to go — download a YOLO model from Settings, configure your Frigate paths if needed, and start working.
+On first run, a welcome page guides you through initial setup — hardware detection, model download, and dependency installation. Open **http://localhost:8080** and follow the steps.
 
 ```bash
 # Options
@@ -48,10 +49,16 @@ On first run, `alice.conf` is generated with sensible defaults. Models and datas
 
 ```bash
 python3 builder.py --no-venv
+```
+
+The builder generates `docker-compose.yml` automatically, depending on your configured hardware (GPU or CPU). 
+Edit the volume paths to match your Frigate setup, then:
+
+```bash
 docker compose up --build -d
 ```
 
-Edit `docker-compose.yml` to map your Frigate media, datasets, and models directories. See [Docker Setup](#docker-setup) below.
+See [Docker Setup](#docker-setup) below for details.
 
 ## Features
 
@@ -85,15 +92,29 @@ Five-step pipeline — each step toggleable, runnable individually or as a seque
 
 | Step | What it does |
 |------|-------------|
-| **1. Export** | Extract snapshots from Frigate SQLite DB → 90/10 train/val split |
+| **1. Export** | Extract newest snapshots from Frigate DB with round-robin camera distribution → 90/10 train/val split |
 | **2. Dedup** | Remove duplicates via pHash, box similarity, and NMS cleanup |
 | **3. Annotate** | Auto-label all images using a teacher model |
 | **4. Train** | Fine-tune student model with real-time metrics (loss, mAP50, mAP50-95) |
-| **5. Export ONNX** | Convert to ONNX for deployment (FP16, dynamic batch) |
+| **5. Export ONNX** | Convert to ONNX for deployment (FP16 or FP32 on GPU, FP32 only on CPU) |
 
 All steps log to the Logs tab with COMPLETED / FAILED / STOPPED status.
 
 ![Training Pipeline](screenshots/trainer.png)
+
+### Device Detection
+
+ALICE automatically detects your hardware at startup and adapts accordingly:
+
+| | NVIDIA GPU | CPU |
+|---|---|---|
+| Training | GPU accelerated | CPU (slower) |
+| Inference | GPU | CPU |
+| ONNX Export | FP16 + FP32 | FP32 only |
+| PyTorch | CUDA build | CPU build |
+| onnxruntime | `onnxruntime-gpu` | `onnxruntime` |
+
+Configure from **Settings → System → Device** (Auto / NVIDIA GPU / CPU). The sidebar and Device tab show live hardware stats.
 
 ### Settings
 
@@ -112,53 +133,57 @@ All configuration in `alice.conf` — editable from the web UI or directly in th
 
 ## Requirements
 
-Python 3.8+ required. The builder creates a `.venv` and installs the base dependency (Pillow) automatically. All other dependencies are optional and can be installed from the Settings page in the web UI with one click:
+Python 3.8+ required. The builder creates a `.venv` and installs the base dependency (Pillow) automatically. All other dependencies are managed by ALICE and can be installed from the welcome page or Settings → System with one click:
 
 | Package | Purpose |
 |---------|---------|
 | **Pillow** | Image processing, pHash, format conversion (auto-installed by builder) |
-| **ultralytics** | YOLO model training & inference |
-| **opencv-python-headless** | Video frame extraction |
-| **numpy** | Numerical operations for dedup |
+| **NumPy** | Numerical operations for dedup |
 | **inotify** | Filesystem watching on Linux (falls back to polling) |
+| **opencv-python-headless** | Video frame extraction |
+| **ONNX** | ONNX model format for export |
+| **onnxslim** | ONNX model optimization |
+| **onnxruntime** | ONNX Runtime — GPU or CPU variant auto-selected |
+| **PyTorch** | Deep learning framework — CUDA or CPU variant auto-selected |
+| **ultralytics** | YOLO model training & inference |
 
-> **Note:** ALICE does **not** install NVIDIA drivers or CUDA. If you want GPU-accelerated training and inference, install the [NVIDIA drivers](https://www.nvidia.com/Download/index.aspx) and [CUDA toolkit](https://developer.nvidia.com/cuda-toolkit) on your system before running ALICE.
+ALICE installs the correct PyTorch variant (CUDA or CPU) based on detected hardware. No manual torch installation needed.
+
+> **Note:** ALICE does **not** install NVIDIA drivers or CUDA. If you want GPU-accelerated training, install the [NVIDIA drivers](https://www.nvidia.com/Download/index.aspx) and [CUDA toolkit](https://developer.nvidia.com/cuda-toolkit) on your system before running ALICE.
 
 ## Docker Setup
 
-```yaml
-services:
-  alice:
-    build: .
-    container_name: alice
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./alice.conf:/app/alice.conf
-      - /path/to/datasets:/datasets
-      - /path/to/models:/models
-      - /path/to/frigate/media/clips:/clips:ro
-      - /path/to/frigate/media/exports:/exports:ro
-      - /path/to/frigate/config/frigate.db:/frigate.db:ro
-    restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
-```
-
-> **Note:** The `deploy.resources` section requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. Remove it if running CPU-only.
-
-Edit the volume paths to match your setup, then:
+The builder generates `docker-compose.yml` with GPU support auto-detected from your host:
 
 ```bash
-docker compose up -d
+python3 builder.py --no-venv
 ```
 
-Your `alice.conf` paths should reference the container-side mount points (`/datasets`, `/models`, `/clips`, `/exports`, `/frigate.db`).
+This creates `docker-compose.yml` with the NVIDIA GPU block included if a GPU is detected, or CPU-only otherwise.
+
+Edit the volume paths to match your setup:
+
+```yaml
+volumes:
+  - ./alice.conf:/app/alice.conf
+  - /path/to/datasets:/app/datasets
+  - /path/to/models:/app/models
+  - /path/to/frigate/clips:/app/clips:ro
+  - /path/to/frigate/exports:/app/exports:ro
+  - /path/to/frigate/frigate.db:/app/frigate.db:ro
+```
+
+> **Important:** The `frigate.db` volume must point to the actual **file**, not a directory. If the file doesn't exist on the host at the time of container creation, Docker will create a directory instead and ALICE won't be able to open the database.
+
+Then start:
+
+```bash
+docker compose up --build -d
+```
+
+On first run, open ALICE in your browser and install dependencies from the welcome page or Settings → System. Dependencies are persisted in a Docker volume across container restarts.
+
+> **Note:** GPU support in Docker requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host. If running the builder on a machine without GPU, the generated compose file will be CPU-only.
 
 ## Dataset Structure
 
@@ -180,9 +205,9 @@ dataset/
 Alice is developed as modular source files assembled into a single `alice.py`:
 
 ```bash
-python3 builder.py                     # → alice.py + .venv/
+python3 builder.py                     # → alice.py + .venv/ + docker-compose.yml
 python3 builder.py -o /path/to/out.py  # custom output path
-python3 builder.py --no-venv           # skip venv creation
+python3 builder.py --no-venv           # skip venv creation (for Docker)
 python3 builder.py --check             # verify all modules and assets exist
 python3 builder.py --list              # show resolved dependency order
 python3 builder.py --strict            # abort on name conflicts
@@ -194,9 +219,10 @@ The builder:
 3. Strips all relative imports (redundant in the flat monolith namespace)
 4. Injects CSS, JS, and HTML assets from `src/assets/` into placeholder tokens
 5. Writes a single self-contained `alice.py`
-6. Creates a `.venv` with Pillow and patches the shebang
+6. Creates a `.venv` with Pillow and patches the shebang (auto-installs `python3-venv` if missing)
+7. Generates `docker-compose.yml` with GPU support auto-detected
 
-Re-running `builder.py` rebuilds `alice.py` but skips venv creation if `.venv` already exists.
+Re-running `builder.py` rebuilds `alice.py` and regenerates `docker-compose.yml`, but skips venv creation if `.venv` already exists.
 
 Source modules live in `src/` — see [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow.
 

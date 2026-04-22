@@ -200,7 +200,8 @@ def rebuild_image_list():
 
 
 def refresh_image_mtime(split, name):
-    """Update mtime for a specific image after edit/save."""
+    """Update mtime for a specific image after edit/save.
+    No re-sort, no version bump — user stays exactly where they are."""
     for item in IMAGE_LIST:
         if item["split"] == split and item["name"] == name:
             img_path = os.path.join(STATE["DATASET_DIR"], "images", split, name)
@@ -209,7 +210,6 @@ def refresh_image_mtime(split, name):
             lbl_mt = os.path.getmtime(lbl_path) if os.path.exists(lbl_path) else 0
             item["mtime"] = max(img_mt, lbl_mt)
             break
-    sort_image_list()
 
 
 def get_filtered(filt, class_filter=-1):
@@ -271,8 +271,7 @@ def start_watchers():
                 i = inotify.adapters.InotifyTrees(
                     [os.path.join(STATE["DATASET_DIR"], "images"), os.path.join(STATE["DATASET_DIR"], "labels")],
                     mask=inotify.constants.IN_CREATE | inotify.constants.IN_DELETE |
-                         inotify.constants.IN_MODIFY | inotify.constants.IN_MOVED_TO |
-                         inotify.constants.IN_MOVED_FROM
+                         inotify.constants.IN_MOVED_TO | inotify.constants.IN_MOVED_FROM
                 )
                 for event in i.event_gen(yield_nones=False):
                     (_, type_names, path, filename) = event

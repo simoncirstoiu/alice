@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .header import (
     CLASS_NAMES, CONF, CONF_DEFAULTS, STATE, LogCapture, STEP_STATUS, TRAINER_LOG, conf,
+    resolve_device,
 )
 from .core import box_iou, read_boxes, write_boxes
 from .ai_phash_video import compute_phash
@@ -66,16 +67,34 @@ def trainer_export_dataset(max_images=0):
     _ss_reset("export", running=True, progress=0, current=0, total=0, message="Loading Frigate DB...")
 
     conn = sqlite3.connect(frigate_db)
-    rows = conn.execute("SELECT id, camera FROM event WHERE has_snapshot = 1").fetchall()
+    rows = conn.execute(
+        "SELECT id, camera FROM event WHERE has_snapshot = 1 ORDER BY start_time DESC"
+    ).fetchall()
     conn.close()
 
     if not rows:
         _ss_reset("export", running=False, progress=0, current=0, total=0, message="No events found")
         return {"ok": False, "error": "No events with snapshots found"}
 
-    # Limit number of images
+    # Limit: pick newest images, round-robin across cameras for even distribution
     if max_images > 0 and max_images < len(rows):
-        rows = rows[:max_images]
+        from collections import defaultdict as _dd
+        cam_buckets = _dd(list)
+        for r in rows:
+            cam_buckets[r[1]].append(r)
+        selected = []
+        cameras = list(cam_buckets.keys())
+        idx = 0
+        while len(selected) < max_images:
+            cam = cameras[idx % len(cameras)]
+            if cam_buckets[cam]:
+                selected.append(cam_buckets[cam].pop(0))
+            else:
+                cameras.remove(cam)
+                if not cameras:
+                    break
+            idx += 1
+        rows = selected
 
     total = len(rows)
     _ss("export")["total"] = total
@@ -704,6 +723,7 @@ def trainer_train(model_path, epochs, batch_size, lr, lr_final, imgsz, freeze, a
     }
     with LogCapture():
         try:
+            train_device = 0 if resolve_device() == "nvidia" else "cpu"
             model.train(
                 data=yaml_path,
                 epochs=epochs,
@@ -717,6 +737,7 @@ def trainer_train(model_path, epochs, batch_size, lr, lr_final, imgsz, freeze, a
                 name="finetune",
                 exist_ok=True,
                 verbose=True,
+                device=train_device,
                 **aug_params,
             )
         except KeyboardInterrupt:
@@ -762,9 +783,14 @@ def trainer_export_onnx(model_path, imgsz=640, opset=13, simplify=True, half=Tru
     if not os.path.exists(model_path):
         return {"ok": False, "error": f"Model not found: {model_path}"}
 
+    # FP16 only works on GPU — force off on CPU
+    effective_device = resolve_device()
+    if effective_device != "nvidia":
+        half = False
+
     _log(f"{'=' * 50}")
     _log(f"ONNX EXPORT: {os.path.basename(model_path)}")
-    _log(f"  ImgSz: {imgsz}, Opset: {opset}, Half: {half}, Dynamic: {dynamic}")
+    _log(f"  ImgSz: {imgsz}, Opset: {opset}, Half: {half}, Dynamic: {dynamic}, Device: {effective_device}")
 
     _ss_reset("onnx",
         running=True,
@@ -776,9 +802,10 @@ def trainer_export_onnx(model_path, imgsz=640, opset=13, simplify=True, half=Tru
     try:
         with LogCapture():
             model = YOLO(model_path)
+            export_device = 0 if effective_device == "nvidia" else "cpu"
             output = model.export(
                 format='onnx', imgsz=imgsz, opset=opset,
-                simplify=simplify, half=half, dynamic=dynamic, device=0
+                simplify=simplify, half=half, dynamic=dynamic, device=export_device
             )
     except Exception as e:
         err_msg = str(e)[:200]

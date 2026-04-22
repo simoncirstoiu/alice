@@ -443,6 +443,74 @@ def main():
     if not args.no_venv:
         setup_venv(args.output)
 
+    generate_docker_compose(args.output)
+
+
+def generate_docker_compose(output_path):
+    """Generate docker-compose.yml with GPU support if NVIDIA is detected."""
+    import subprocess
+    output_dir = os.path.dirname(os.path.abspath(output_path))
+    compose_path = os.path.join(output_dir, "docker-compose.yml")
+
+    # Detect GPU
+    has_gpu = False
+    try:
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=8)
+        if result.returncode == 0:
+            has_gpu = True
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+
+    base = """services:
+  alice:
+    build: .
+    container_name: alice
+    ports:
+      - "8080:8080"
+    volumes:
+      # Config — persisted on host
+      - ./alice.conf:/app/alice.conf
+
+      # Datasets — read/write (Alice creates images + labels here)
+      - /path/to/datasets:/app/datasets
+
+      # Models — read/write (training output saved here)
+      - /path/to/models:/app/models
+
+      # Frigate media — read-only (set LIVE_DIR, EXPORTS_DIR, FRIGATE_DB in alice.conf)
+      - /path/to/frigate/clips:/app/clips:ro
+      - /path/to/frigate/exports:/app/exports:ro
+      - /path/to/frigate/frigate.db:/app/frigate.db:ro
+
+      # Persist installed dependencies across container restarts
+      - alice_pip_cache:/usr/local/lib/python3.11/site-packages
+
+    restart: unless-stopped
+"""
+
+    gpu_block = """
+    # NVIDIA GPU — auto-detected by builder
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+"""
+
+    compose = base
+    if has_gpu:
+        compose += gpu_block
+
+    compose += "\nvolumes:\n  alice_pip_cache:\n"
+
+    with open(compose_path, "w") as f:
+        f.write(compose)
+
+    mode = "NVIDIA GPU" if has_gpu else "CPU"
+    print(f"\n  docker-compose.yml generated ({mode})")
+
 
 if __name__ == "__main__":
     main()

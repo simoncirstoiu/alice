@@ -3,6 +3,13 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.5.8] - 22-04-2026
+
+- Implemented CPU support as a fallback if no supported GPU is found.
+- Implemented a new docker-compose mechanism, that will automatically generate the proper docker-compose file depending on detected hardware.
+- Fixed various bugs.
+- Other improvements.
+
 ## [0.5.7] - 20-04-2026
 
 - Fixed welcome/onboarding page to proper support future development.
