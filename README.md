@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/python-3.8+-blue?logo=python&logoColor=white" alt="Python">
   <img src="https://img.shields.io/badge/YOLO-v8%20%7C%2011-orange" alt="YOLO">
   <img src="https://img.shields.io/badge/Frigate-NVR-green" alt="Frigate">
-  <img src="https://img.shields.io/badge/license-CC%20BY--NC%204.0-lightgrey" alt="License">
+  <img src="https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-lightgrey" alt="License">
 </p>
 
 ---
@@ -250,7 +250,7 @@ If you find ALICE useful, you can buy me a coffee:
 
 ## License
 
-[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — free for personal, non-commercial use. For commercial licensing, contact alice@it-link.net.
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — free for personal, non-commercial use. For commercial licensing, contact alice@it-link.net.
 
 
 ## Author
