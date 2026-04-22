@@ -3,6 +3,15 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.5.7] - 20-04-2026
+
+- Fixed welcome/onboarding page to proper support future development.
+
+## [0.5.6] - 19-04-2026
+
+- Small fixes.
+
+
 ## [0.5.5] - 19-04-2026
 
 ### Fixed

@@ -58,9 +58,9 @@ if __name__ == "__main__":
         print(f"  Config not found: {STATE['CONF_PATH']}")
         print(f"  Generating default alice.conf...")
         generate_default_conf(STATE["CONF_PATH"])
-        STATE["FIRST_RUN"] = True
 
     CONF = load_conf(STATE["CONF_PATH"])
+    STATE["FIRST_RUN"] = not CONF.get("WELCOME_DISMISSED", False)
 
     # Resolve empty paths to alice.py directory and ensure they exist
     _path_defaults = {
