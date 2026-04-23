@@ -776,7 +776,7 @@ def trainer_train(model_path, epochs, batch_size, lr, lr_final, imgsz, freeze, a
         return {"ok": False, "error": "Training completed but best.pt not found"}
 
 
-def trainer_export_onnx(model_path, imgsz=640, opset=13, simplify=True, half=True, dynamic=False):
+def trainer_export_onnx(model_path, imgsz=640, opset=13, simplify=True, half=False, dynamic=False):
     """Export a .pt model to ONNX format."""
     from ultralytics import YOLO
 

@@ -406,7 +406,7 @@ function renderOnnxStep() {
 
   <div style="display:flex;gap:20px;margin-bottom:24px">
     <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Run onnx-simplifier to optimize the graph. Reduces model size and improves inference speed."><input type="checkbox" id="onnxSimplify" checked style="accent-color:var(--ac);width:15px;height:15px">Simplify</label>
-    <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Export weights as 16-bit float. Halves model size with minimal accuracy loss. Required for TensorRT FP16."><input type="checkbox" id="onnxHalf" ${DEVICE_INFO.effective === 'nvidia' ? 'checked' : 'disabled'} style="accent-color:var(--ac);width:15px;height:15px">FP16${DEVICE_INFO.effective !== 'nvidia' ? ' <span style="font-size:var(--fs-xs);color:var(--t3)">(GPU only)</span>' : ''}</label>
+    <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Export weights as 16-bit float. Halves model size with minimal accuracy loss. Required for TensorRT FP16."><input type="checkbox" id="onnxHalf" ${DEVICE_INFO.effective === 'nvidia' ? '' : 'disabled'} style="accent-color:var(--ac);width:15px;height:15px">FP16${DEVICE_INFO.effective !== 'nvidia' ? ' <span style="font-size:var(--fs-xs);color:var(--t3)">(GPU only)</span>' : ''}</label>
     <label style="display:flex;align-items:center;gap:6px;font-size:var(--fs-base);color:var(--t1);cursor:pointer" data-tip="Allow dynamic batch size and input dimensions. Disable for fixed-size TensorRT engines."><input type="checkbox" id="onnxDynamic" style="accent-color:var(--ac);width:15px;height:15px">Dynamic</label>
   </div>
 
@@ -959,7 +959,7 @@ function runOnnxExport() {
   const imgsz = parseInt(getTrainerFormValue('onnxImgsz', 640));
   const opset = parseInt(getTrainerFormValue('onnxOpset', 13));
   const simplify = getTrainerFormValue('onnxSimplify', true);
-  const half = getTrainerFormValue('onnxHalf', true);
+  const half = getTrainerFormValue('onnxHalf', false);
   const dynamic = getTrainerFormValue('onnxDynamic', false);
 
   _setStepRunning('onnx');

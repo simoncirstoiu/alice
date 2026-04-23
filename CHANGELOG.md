@@ -3,6 +3,11 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.1] - 23-04-2026
+
+- Fixed fp16/32, now by default FP16 will be unchecked, you can still check it if your system supports fp16.
+- Added Discord Community link under Help.
+
 ## [0.6.0] - 22-04-2026
 
 - License changed to PolyForm Noncommercial 1.0.0
