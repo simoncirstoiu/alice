@@ -1031,6 +1031,11 @@ function runSelectedPipeline() {
     trainImgsz:  parseInt(getTrainerFormValue('trainImgsz', CONF.IMAGE_SIZE || 640)),
     trainFreeze: parseInt(getTrainerFormValue('trainFreeze', CONF.FREEZE_LAYERS || 10)),
     trainAugment: getTrainerFormValue('trainAugment', false),
+    onnxImgsz:   parseInt(getTrainerFormValue('onnxImgsz', 640)),
+    onnxOpset:   parseInt(getTrainerFormValue('onnxOpset', 13)),
+    onnxSimplify: getTrainerFormValue('onnxSimplify', true),
+    onnxHalf:    getTrainerFormValue('onnxHalf', false),
+    onnxDynamic: getTrainerFormValue('onnxDynamic', false),
   };
 
   const teacher = CONF.TEACHER_MODEL || '';

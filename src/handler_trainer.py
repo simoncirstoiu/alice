@@ -207,7 +207,7 @@ def _post_trainer_onnx(body: dict) -> tuple[int, str, bytes]:
     _imgsz = int(body.get("imgsz", 640))
     _opset = int(body.get("opset", 13))
     _simplify = body.get("simplify", True)
-    _half = body.get("half", True)
+    _half = body.get("half", False)
     _dynamic = body.get("dynamic", False)
 
     def _run_onnx():
@@ -322,11 +322,11 @@ def _post_trainer_pipeline_run(body: dict) -> tuple[int, str, bytes]:
                             model_path = os.path.join(conf("MODELS_DIR"), model_path)
                         trainer_export_onnx(
                             model_path = model_path,
-                            imgsz      = int(params.get("trainImgsz", 640)),
-                            opset      = 13,
-                            simplify   = True,
-                            half       = True,
-                            dynamic    = False,
+                            imgsz      = int(params.get("onnxImgsz", params.get("trainImgsz", 640))),
+                            opset      = int(params.get("onnxOpset", 13)),
+                            simplify   = params.get("onnxSimplify", True),
+                            half       = params.get("onnxHalf", False),
+                            dynamic    = params.get("onnxDynamic", False),
                         )
 
                     # Check for step error
