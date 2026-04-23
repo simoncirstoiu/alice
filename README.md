@@ -248,6 +248,10 @@ If you find ALICE useful, you can buy me a coffee:
 
 [![Donate](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://www.paypal.com/donate/?hosted_button_id=988G9YXYX78RG)
 
+Need help or want to chat? Join Alice Discord:
+
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/SnsDbNuhmW)
+
 ## License
 
 [PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — free for personal, non-commercial use. For commercial licensing, contact alice@it-link.net.
