@@ -115,8 +115,17 @@ def _get_api_meta(params: dict) -> tuple[int, str, bytes]:
     cls = int(params.get("c", ["-1"])[0])
     i = int(params.get("i", ["0"])[0])
     filtered = get_filtered(filt, cls)
-    if not filtered or i >= len(filtered):
+    if not filtered:
         return _json_err("Image not found")
+    # Clamp index to the valid range. The active class filter shrinks whenever
+    # the user edits a label that drops an image out of the filter, but the
+    # client's cached totalImages is only refreshed by setFilter/setClassFilter.
+    # Without clamping, navigation goes off the end and every subsequent fetch
+    # 400s, which freezes the canvas until the user changes filters.
+    if i >= len(filtered):
+        i = len(filtered) - 1
+    elif i < 0:
+        i = 0
     item = filtered[i]
     bd = read_boxes(get_label_path(item["split"], item["name"]))
     return _json_ok({"split": item["split"], "name": item["name"],
@@ -157,8 +166,14 @@ def _get_img_raw(params: dict) -> tuple[int, str, bytes]:
     cls = int(params.get("c", ["-1"])[0])
     i = int(params.get("i", ["0"])[0])
     filtered = get_filtered(filt, cls)
-    if not filtered or i >= len(filtered):
+    if not filtered:
         return _json_err("Image not found")
+    # See _get_api_meta — clamp out-of-bounds indices so the canvas keeps
+    # rendering after a label edit shrinks the filter.
+    if i >= len(filtered):
+        i = len(filtered) - 1
+    elif i < 0:
+        i = 0
     item = filtered[i]
     p = os.path.join(STATE["DATASET_DIR"], "images", item["split"], item["name"])
     if not os.path.exists(p):
