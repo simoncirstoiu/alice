@@ -212,8 +212,14 @@ def refresh_image_mtime(split, name):
             break
 
 
-def get_filtered(filt, class_filter=-1):
-    """Filter IMAGE_LIST by split and class."""
+def get_filtered(filt, class_filter=-1, pin_split=None, pin_name=None):
+    """Filter IMAGE_LIST by split and class.
+
+    If pin_split/pin_name are provided and the pinned image would otherwise
+    be excluded by the active filter, it is re-inserted at its natural
+    position (preserving IMAGE_LIST order). This keeps the image the user
+    is currently viewing visible until they navigate away from it.
+    """
     if filt == 'train':
         lst = [x for x in IMAGE_LIST if x["split"] == 'train']
     elif filt == 'val':
@@ -224,6 +230,26 @@ def get_filtered(filt, class_filter=-1):
         lst = list(IMAGE_LIST)
     if class_filter >= 0:
         lst = [x for x in lst if class_filter in x["classes"]]
+
+    # Pin the user's current image into the result if it would be excluded.
+    if pin_split and pin_name:
+        already = any(x["split"] == pin_split and x["name"] == pin_name for x in lst)
+        if not already:
+            pinned = next(
+                (x for x in IMAGE_LIST
+                 if x["split"] == pin_split and x["name"] == pin_name),
+                None,
+            )
+            if pinned is not None:
+                # Insert at natural position based on IMAGE_LIST ordering.
+                pin_pos = IMAGE_LIST.index(pinned)
+                insert_at = len(lst)
+                for j, item in enumerate(lst):
+                    if IMAGE_LIST.index(item) > pin_pos:
+                        insert_at = j
+                        break
+                lst.insert(insert_at, pinned)
+
     return lst
 
 

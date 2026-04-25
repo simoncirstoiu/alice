@@ -135,6 +135,17 @@ if __name__ == "__main__":
     # Start filesystem watchers
     start_watchers()
 
+    from .handler_api import background_warmer_tick
+
+    def _background_warmer():
+        import time as _time
+        while True:
+            background_warmer_tick()
+            _time.sleep(3)
+
+    bw = threading.Thread(target=_background_warmer, daemon=True)
+    bw.start()
+
     print(f"\n  http://0.0.0.0:{port}\n")
 
     ThreadedHTTPServer(("0.0.0.0", port), Handler).serve_forever()

@@ -59,8 +59,13 @@ let aiModelStatus = 'idle'; // idle, loading, loaded
 // Navigation counter — incremented on every image change, used to cancel stale async ops
 let _navCounter = 0;
 
-// Unified flash timer — single global, cleared on navigation
 let _flashTimer = null;
+
+let _filterDirty = false;
+
+let _datasetTotalUnfiltered = -1;
+
+let STATE_DATASET_PATH = '';
 
 // Dependency cache — updated at startup and after install
 let _depsInstalled = {};  // { "ultralytics": true, "cv2": false, ... }
@@ -123,7 +128,14 @@ const ctx = canvas.getContext('2d');
 
 function init() {
   resizeCanvas();
+  requestAnimationFrame(() => {
+    resizeCanvas();
+    if (imgLoaded) { fitImage(); render(); }
+  });
   window.addEventListener('resize', resizeCanvas);
+
+  const dsel = document.getElementById('datasetSel');
+  if (dsel) STATE_DATASET_PATH = dsel.value;
 
   // Load settings into Settings page
   loadSettingsUI();
@@ -148,8 +160,13 @@ function init() {
   // Update sidebar toggle position
   updateSidebarToggle();
 
-  // Keyboard
   document.addEventListener('keydown', onKeyDown);
+
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.tagName === 'SELECT') {
+      e.target.blur();
+    }
+  });
 
   // Check GPU status for sidebar — poll every 5s
   updateSidebarGpu();
@@ -206,6 +223,8 @@ let _lastVersions = { dataset: -1, live: -1, video: -1 };
 
 function backgroundRefresh() {
   fetch('/api/version').then(r => r.json()).then(v => {
+    _datasetTotalUnfiltered = v.total;
+
     // Dataset
     if (_lastVersions.dataset >= 0 && v.dataset !== _lastVersions.dataset) {
       totalImages = v.total;
@@ -547,8 +566,24 @@ function loadInfo() {
       totalImages = d.total;
       document.getElementById('imgTotal').textContent = totalImages;
       if (currentIdx >= totalImages) currentIdx = Math.max(0, totalImages - 1);
-      if (totalImages > 0) loadImage(currentIdx);
-      else clearCanvas();
+      if (totalImages > 0) {
+        if (filter === 'all' && classFilter === -1) {
+          _datasetTotalUnfiltered = d.total;
+        }
+        loadImage(currentIdx);
+      } else {
+        if (filter === 'all' && classFilter === -1) {
+          _datasetTotalUnfiltered = 0;
+          clearCanvas();
+        } else if (_datasetTotalUnfiltered >= 0) {
+          clearCanvas();
+        } else {
+          fetch('/api/version').then(r => r.json()).then(v => {
+            _datasetTotalUnfiltered = v.total;
+            clearCanvas();
+          }).catch(() => clearCanvas());
+        }
+      }
     });
 }
 
@@ -606,7 +641,13 @@ function clearCanvas() {
       } else if (currentMode === 'video') {
         est.innerHTML = 'No video clips found.<br><span style="font-size:var(--fs-sm);color:var(--t3)">Check that EXPORTS_DIR is configured in Settings and contains video files.</span>';
       } else {
-        est.innerHTML = 'No images in dataset.<br><span style="font-size:var(--fs-sm);color:var(--t3)">Use Live mode to import snapshots, or run the Export step in Trainer.</span>';
+        const hasActiveFilter = (filter !== 'all' || classFilter !== -1);
+        const datasetHasImages = (_datasetTotalUnfiltered > 0);
+        if (hasActiveFilter && datasetHasImages) {
+          est.innerHTML = 'No images match the active filter.<br><span style="font-size:var(--fs-sm);color:var(--t3)">Try a different split or class, or clear the filter.</span>';
+        } else {
+          est.innerHTML = 'No images in dataset.<br><span style="font-size:var(--fs-sm);color:var(--t3)">Use Live mode to import snapshots, or run the Export step in Trainer.</span>';
+        }
       }
     }
   }
@@ -621,6 +662,7 @@ function updatePanelInfo() {
 function setFilter(f) {
   filter = f;
   currentIdx = 0;
+  _filterDirty = false;
   document.querySelectorAll('#toolbar-dataset [data-filter]').forEach(el => {
     el.classList.toggle('active', el.dataset.filter === f);
   });
@@ -630,11 +672,34 @@ function setFilter(f) {
 function setClassFilter(c) {
   classFilter = c;
   currentIdx = 0;
+  _filterDirty = false;
   loadInfo();
 }
 
 function navigate(delta) {
   if (currentMode === 'dataset') {
+    if (_filterDirty) {
+      _filterDirty = false;
+      fetch(`/api/info?f=${filter}&c=${classFilter}`)
+        .then(r => r.json())
+        .then(d => {
+          totalImages = d.total;
+          document.getElementById('imgTotal').textContent = totalImages;
+          if (totalImages === 0) { clearCanvas(); return; }
+          if (currentIdx >= totalImages) currentIdx = totalImages - 1;
+          let newIdx = currentIdx + delta;
+          if (newIdx < 0) newIdx = totalImages - 1;
+          else if (newIdx >= totalImages) newIdx = 0;
+          loadImage(newIdx);
+        })
+        .catch(() => {
+          let newIdx = currentIdx + delta;
+          if (newIdx < 0) newIdx = totalImages - 1;
+          else if (newIdx >= totalImages) newIdx = 0;
+          if (totalImages > 0) loadImage(newIdx);
+        });
+      return;
+    }
     let newIdx = currentIdx + delta;
     if (newIdx < 0) newIdx = totalImages - 1;
     else if (newIdx >= totalImages) newIdx = 0;
@@ -681,14 +746,16 @@ function render() {
     ctx.strokeStyle = color;
     ctx.lineWidth = i === selectedBox ? 3 / zoom : 2 / zoom;
     ctx.strokeRect(x, y, w, h);
-
     // Label background
     const label = CN[b.cls] || String(b.cls);
     ctx.font = `${Math.max(11, 13 / zoom)}px -apple-system, sans-serif`;
     const tm = ctx.measureText(label);
     const lh = 16 / zoom;
-    ctx.fillStyle = color + 'cc';
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = color;
     ctx.fillRect(x, y - lh, tm.width + 8 / zoom, lh);
+    ctx.restore();
     ctx.fillStyle = '#000';
     ctx.fillText(label, x + 4 / zoom, y - 4 / zoom);
 
@@ -1019,11 +1086,16 @@ canvas.addEventListener('wheel', function(e) {
     const iw = img.naturalWidth, ih = img.naturalHeight;
     const minZoom = Math.min(canvasW / iw, canvasH / ih) * 0.995;
     let newZoom = zoom * factor;
-    if (newZoom < minZoom) newZoom = minZoom;
-    const zf = newZoom / zoom;
-    panX = mx - (mx - panX) * zf;
-    panY = my - (my - panY) * zf;
-    zoom = newZoom;
+    if (newZoom <= minZoom) {
+      zoom = minZoom;
+      panX = (canvasW - iw * zoom) / 2;
+      panY = (canvasH - ih * zoom) / 2;
+    } else {
+      const zf = newZoom / zoom;
+      panX = mx - (mx - panX) * zf;
+      panY = my - (my - panY) * zf;
+      zoom = newZoom;
+    }
     render();
   } else {
     // Navigate images
@@ -1110,6 +1182,7 @@ function resizeBox(idx, handle, nx, ny) {
 // ============================================================
 function saveBoxes() {
   if (currentMode !== 'dataset') return;
+  _filterDirty = true;
   fetch('/api/save', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -1165,15 +1238,110 @@ function replaceClass(idx, newCls) {
 // DATASET SWITCH
 // ============================================================
 function switchDataset(path) {
+  if (path === '__create__') {
+    openCreateDatasetDialog();
+    const sel = document.getElementById('datasetSel');
+    if (sel) sel.value = STATE_DATASET_PATH || '';
+    return;
+  }
   fetch('/api/switch', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({ path: path })
   }).then(r => r.json()).then(d => {
     if (d.ok) {
+      STATE_DATASET_PATH = path;
       currentIdx = 0;
       loadInfo();
     }
+  });
+}
+
+function openCreateDatasetDialog() {
+  const existing = document.getElementById('createDatasetModal');
+  if (existing) existing.remove();
+  const m = document.createElement('div');
+  m.id = 'createDatasetModal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:center;justify-content:center';
+  m.innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--bd2);border-radius:12px;padding:24px;width:min(440px,92vw)">
+      <div style="font-size:var(--fs-lg);font-weight:700;color:var(--t0b);margin-bottom:14px">Create New Dataset</div>
+      <div style="font-size:var(--fs-sm);color:var(--t1);margin-bottom:8px">Name</div>
+      <input id="newDatasetName" class="text-inp w-full" type="text" placeholder="my-dataset" autocomplete="off" style="margin-bottom:6px">
+      <div style="font-size:var(--fs-xs);color:var(--t2);margin-bottom:18px">Allowed: letters, digits, dash, underscore, dot. Max 64 chars.</div>
+      <div id="newDatasetError" style="font-size:var(--fs-sm);color:var(--acr);margin-bottom:12px;display:none"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button class="btn" onclick="closeCreateDatasetDialog()">Cancel</button>
+        <button class="btn primary" onclick="submitCreateDataset()">Create</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  const inp = document.getElementById('newDatasetName');
+  if (inp) {
+    inp.focus();
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); submitCreateDataset(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeCreateDatasetDialog(); }
+    });
+  }
+}
+
+function closeCreateDatasetDialog() {
+  document.getElementById('createDatasetModal')?.remove();
+}
+
+function submitCreateDataset() {
+  const inp = document.getElementById('newDatasetName');
+  const err = document.getElementById('newDatasetError');
+  if (!inp) return;
+  const name = inp.value.trim();
+  if (!name) {
+    if (err) { err.textContent = 'Name is required'; err.style.display = 'block'; }
+    return;
+  }
+  fetch('/api/dataset/create', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: name })
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      STATE_DATASET_PATH = d.path;
+      const sel = document.getElementById('datasetSel');
+      if (sel && Array.isArray(d.datasets)) {
+        sel.innerHTML = '';
+        for (const ds of d.datasets) {
+          const opt = document.createElement('option');
+          opt.value = ds.path;
+          opt.textContent = ds.name;
+          if (ds.path === d.path) opt.selected = true;
+          sel.appendChild(opt);
+        }
+        const optCreate = document.createElement('option');
+        optCreate.value = '__create__';
+        optCreate.textContent = '+ Create New Dataset';
+        sel.appendChild(optCreate);
+      }
+      const tsel = document.getElementById('trainerDatasetSel');
+      if (tsel && Array.isArray(d.datasets)) {
+        const tcurrent = tsel.value;
+        tsel.innerHTML = '';
+        for (const ds of d.datasets) {
+          const opt = document.createElement('option');
+          opt.value = ds.path;
+          opt.textContent = ds.name;
+          if (ds.path === tcurrent) opt.selected = true;
+          tsel.appendChild(opt);
+        }
+      }
+      closeCreateDatasetDialog();
+      toast(`Dataset "${d.name}" created`);
+      currentIdx = 0;
+      loadInfo();
+    } else {
+      if (err) { err.textContent = d.error || 'Could not create dataset'; err.style.display = 'block'; }
+    }
+  }).catch(e => {
+    if (err) { err.textContent = 'Network error'; err.style.display = 'block'; }
   });
 }
 
@@ -1249,6 +1417,28 @@ function saveSettings() {
     if (d.ok) {
       Object.assign(CONF, d.conf);
       toast('Settings saved to alice.conf');
+      const cfSel = document.getElementById('classFilterSel');
+      if (cfSel) {
+        const current = cfSel.value;
+        const cfClasses = (CONF.DEFAULT_CLASSES || []).map(x => parseInt(x))
+          .filter(n => !isNaN(n));
+        const sortedUnique = Array.from(new Set(cfClasses)).sort((a, b) => a - b);
+        cfSel.innerHTML = '<option value="-1">All classes</option>';
+        for (const c of sortedUnique) {
+          const opt = document.createElement('option');
+          opt.value = String(c);
+          opt.textContent = `${c}: ${CN[c] || c}`;
+          cfSel.appendChild(opt);
+        }
+        const stillThere = (current === '-1') ||
+          sortedUnique.includes(parseInt(current));
+        if (stillThere) {
+          cfSel.value = current;
+        } else {
+          cfSel.value = '-1';
+          if (typeof setClassFilter === 'function') setClassFilter(-1);
+        }
+      }
       // Refresh live camera dropdown if cameras were rescanned
       if (d.cameras && Array.isArray(d.cameras)) {
         const sel = document.getElementById('liveCamSel');

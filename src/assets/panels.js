@@ -1021,8 +1021,11 @@ function showDupeFullscreen(which) {
       const lbl = CN[b.cls] || String(b.cls);
       ctx2.font = '13px -apple-system, sans-serif';
       const tm = ctx2.measureText(lbl);
-      ctx2.fillStyle = bColor + 'cc';
+      ctx2.save();
+      ctx2.globalAlpha = 0.8;
+      ctx2.fillStyle = bColor;
       ctx2.fillRect(x, y - 18, tm.width + 8, 18);
+      ctx2.restore();
       ctx2.fillStyle = '#000';
       ctx2.fillText(lbl, x + 4, y - 4);
     }
@@ -1058,8 +1061,11 @@ function drawDupeCanvas(canvasId, image, boxList) {
     const label = CN[b.cls] || String(b.cls);
     ctx2.font = '12px -apple-system, sans-serif';
     const tm = ctx2.measureText(label);
-    ctx2.fillStyle = color + 'cc';
+    ctx2.save();
+    ctx2.globalAlpha = 0.8;
+    ctx2.fillStyle = color;
     ctx2.fillRect(x, y - 16, tm.width + 8, 16);
+    ctx2.restore();
     ctx2.fillStyle = '#000';
     ctx2.fillText(label, x + 4, y - 4);
   }
@@ -1164,15 +1170,40 @@ function showBoxContextMenu(e, boxIdx) {
   m.innerHTML = `
     <div style="padding:var(--pad-xs) var(--pad-md);font-size:var(--fs-xs);color:var(--t2);font-family:var(--fontUI)">${name} [${boxIdx}]</div>
     <div style="height:1px;background:var(--bd);margin:2px 0"></div>
-    ${classItems ? '<div style="padding:var(--pad-xs) var(--pad-md);font-size:var(--fs-xs);color:var(--t2)">Change class to:</div>' + classItems : ''}
+    ${classItems ? '<div style="padding:var(--pad-xs) var(--pad-md);font-size:var(--fs-xs);color:var(--t2)">Change class to:</div><div class="ctx-class-list">' + classItems + '</div>' : ''}
     <div style="height:1px;background:var(--bd);margin:2px 0"></div>
     <div class="ctx-item" style="color:var(--acr)" onclick="deleteBox(${boxIdx});closeCtxMenu()">Delete</div>`;
   document.body.appendChild(m);
+
+  fitMenuToViewport(m, e.clientX, e.clientY);
 
   // Close on click outside
   setTimeout(() => {
     document.addEventListener('click', closeCtxMenu, {once:true});
   }, 10);
+}
+
+function fitMenuToViewport(menu, anchorX, anchorY) {
+  const margin = 8;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const r = menu.getBoundingClientRect();
+
+  let left = anchorX;
+  let top = anchorY;
+
+  if (left + r.width > vw - margin) {
+    left = anchorX - r.width;
+    if (left < margin) left = Math.max(margin, vw - r.width - margin);
+  }
+
+  if (top + r.height > vh - margin) {
+    top = anchorY - r.height;
+    if (top < margin) top = Math.max(margin, vh - r.height - margin);
+  }
+
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
 }
 
 function closeCtxMenu() {
@@ -1211,9 +1242,7 @@ function showImageContextMenu(e) {
   m.innerHTML = items;
   document.body.appendChild(m);
 
-  const rect = m.getBoundingClientRect();
-  if (rect.right > window.innerWidth) m.style.left = (window.innerWidth - rect.width - 8) + 'px';
-  if (rect.bottom > window.innerHeight) m.style.top = (window.innerHeight - rect.height - 8) + 'px';
+  fitMenuToViewport(m, e.clientX, e.clientY);
 
   setTimeout(() => {
     document.addEventListener('click', closeCtxMenu, {once:true});

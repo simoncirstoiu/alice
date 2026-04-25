@@ -56,6 +56,7 @@ def _get_index(params: dict) -> tuple[int, str, bytes]:
         ds_opts += f'<option value="{ds["path"]}"{sel}>{ds["name"]}</option>'
     if not ds_opts:
         ds_opts = '<option value="" selected disabled>No datasets configured</option>'
+    ds_opts_viewer = ds_opts + '<option value="__create__">+ Create New Dataset</option>'
 
     default_classes = conf("DEFAULT_CLASSES")
     cls_filter_opts = ""
@@ -78,7 +79,7 @@ def _get_index(params: dict) -> tuple[int, str, bytes]:
         video_clip_opts += f'<option value="{v["path"]}">{v["name"]}</option>'
 
     html = html.replace("%%VERSION%%", VERSION)
-    html = html.replace("%%DATASET_OPTIONS%%", ds_opts)
+    html = html.replace("%%DATASET_OPTIONS%%", ds_opts_viewer)
     html = html.replace("%%DATASET_OPTIONS_TRAINER%%", ds_opts)
     html = html.replace("%%CLASS_FILTER_OPTIONS%%", cls_filter_opts)
     html = html.replace("%%MODEL_OPTIONS%%", model_opts)
@@ -199,6 +200,22 @@ def _get_api_meta_byname(params: dict) -> tuple[int, str, bytes]:
 
 _last_live_scan: float = 0.0
 
+def _refresh_live_cache():
+    global _last_live_scan
+    scan_live_images("all", 24)
+    _last_live_scan = time.time()
+
+
+def background_warmer_tick():
+    try:
+        _refresh_gpu_cache()
+    except Exception:
+        pass
+    try:
+        _refresh_live_cache()
+    except Exception:
+        pass
+
 def _filter_live(cam, hours):
     """Filter LIVE_ALL by time cutoff and camera. Returns filtered list."""
     cutoff = time.time() - (hours * 3600)
@@ -211,10 +228,9 @@ def _get_api_live_info(params: dict) -> tuple[int, str, bytes]:
     global _last_live_scan
     cam = params.get("cam", ["all"])[0]
     hours = int(params.get("hours", ["24"])[0])
-    now = time.time()
-    if now - _last_live_scan > 2.0:
+    if not LIVE_ALL and _last_live_scan == 0.0:
         scan_live_images("all", hours)
-        _last_live_scan = now
+        _last_live_scan = time.time()
     return _json_ok({"total": len(_filter_live(cam, hours)), "cameras": LIVE_CAMERAS})
 
 
@@ -343,13 +359,12 @@ def _get_api_version(params: dict) -> tuple[int, str, bytes]:
     })
 
 
-def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
+def _refresh_gpu_cache() -> dict:
     global _gpu_cache, _gpu_cache_time
     effective = STATE.get("DEVICE_EFFECTIVE", "cpu")
     if effective != "nvidia":
         data = {"ok": True, "mode": "cpu"}
         try:
-            # CPU name
             cpu_name = ""
             with open("/proc/cpuinfo") as f:
                 for line in f:
@@ -358,10 +373,8 @@ def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
                         break
             data["gpu_name"] = cpu_name or "CPU"
             data["cores"] = str(os.cpu_count() or "?")
-            # Load average
             load1, load5, load15 = os.getloadavg()
             data["load"] = f"{load1:.1f}"
-            # Memory from /proc/meminfo
             meminfo = {}
             with open("/proc/meminfo") as f:
                 for line in f:
@@ -373,13 +386,11 @@ def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
             mem_used = mem_total - mem_avail
             data["mem_used"] = str(mem_used)
             data["mem_total"] = str(mem_total)
-            # Temperature (best effort)
             try:
                 with open("/sys/class/thermal/thermal_zone0/temp") as f:
                     data["temp"] = str(int(f.read().strip()) // 1000)
             except Exception:
                 pass
-            # Build output text
             lines = [f"CPU: {data['gpu_name']}", f"Cores: {data['cores']}", f"Load: {data['load']}"]
             lines.append(f"Memory: {mem_used} / {mem_total} MiB")
             if data.get("temp"):
@@ -388,10 +399,9 @@ def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
         except Exception:
             data["gpu_name"] = "CPU"
             data["output"] = "Running in CPU mode."
-        return _json_ok(data)
-    now = time.time()
-    if _gpu_cache and (now - _gpu_cache_time) < 4:
-        return _json_ok(_gpu_cache)
+        _gpu_cache = data
+        _gpu_cache_time = time.time()
+        return data
     try:
         result = subprocess.run(["nvidia-smi"], capture_output=True, text=True, timeout=8)
         output = result.stdout.strip()
@@ -414,16 +424,28 @@ def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
         except Exception:
             pass
         _gpu_cache = data
-        _gpu_cache_time = now
-        return _json_ok(data)
+        _gpu_cache_time = time.time()
+        return data
     except FileNotFoundError:
-        return _json_ok({"ok": True, "mode": "cpu", "gpu_name": "CPU Mode", "output": "nvidia-smi not found — running in CPU mode."})
+        data = {"ok": True, "mode": "cpu", "gpu_name": "CPU Mode", "output": "nvidia-smi not found — running in CPU mode."}
+        _gpu_cache = data
+        _gpu_cache_time = time.time()
+        return data
     except subprocess.TimeoutExpired:
         if _gpu_cache:
-            return _json_ok({**_gpu_cache, "cached": True})
-        return _json_err("nvidia-smi timeout")
+            return {**_gpu_cache, "cached": True}
+        return {"ok": False, "error": "nvidia-smi timeout"}
     except Exception as e:
-        return _json_err(str(e))
+        return {"ok": False, "error": str(e)}
+
+
+def _get_api_gpu(params: dict) -> tuple[int, str, bytes]:
+    if _gpu_cache:
+        return _json_ok(_gpu_cache)
+    data = _refresh_gpu_cache()
+    if data.get("ok"):
+        return _json_ok(data)
+    return _json_err(data.get("error", "GPU info unavailable"))
 
 
 def _get_api_device_detect(params: dict) -> tuple[int, str, bytes]:
@@ -749,6 +771,36 @@ def _post_switch(body: dict) -> tuple[int, str, bytes]:
         PHASH_CACHE.clear()
         return _json_ok({"ok": True, "total": len(IMAGE_LIST), "name": os.path.basename(new_path)})
     return _json_err("Invalid dataset")
+
+
+def _post_dataset_create(body: dict) -> tuple[int, str, bytes]:
+    name = (body.get("name") or "").strip()
+    if not name:
+        return _json_err("Name is required")
+    safe = "".join(c for c in name if c.isalnum() or c in "-_.")
+    if safe != name or not safe or safe.startswith(".") or len(safe) > 64:
+        return _json_err("Invalid name (allowed: letters, digits, - _ . ; max 64 chars)")
+    root = conf("DATASETS_ROOT")
+    if not root or not os.path.isdir(root):
+        return _json_err("DATASETS_ROOT is not configured or does not exist")
+    new_path = os.path.join(root, safe)
+    if os.path.exists(new_path):
+        return _json_err("A dataset with this name already exists")
+    try:
+        for sub in ("images/train", "images/val", "labels/train", "labels/val"):
+            os.makedirs(os.path.join(new_path, sub), exist_ok=True)
+    except OSError as e:
+        return _json_err(f"Could not create dataset: {e}")
+    STATE["DATASET_DIR"] = new_path
+    rebuild_image_list()
+    PHASH_CACHE.clear()
+    return _json_ok({
+        "ok": True,
+        "name": safe,
+        "path": new_path,
+        "datasets": scan_datasets(),
+        "total": len(IMAGE_LIST),
+    })
 
 
 def _post_populate_labels(body: dict) -> tuple[int, str, bytes]:

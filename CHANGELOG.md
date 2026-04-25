@@ -3,6 +3,18 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.2] - 25-04-2026
+
+- Fixed canvas getting stuck and showing 400 errors when editing the current image dropped it out of an active class filter. Thanks @ngk0 for the bug report in #2.
+- Fixed bounding box class names showing as empty black bands instead of the label text for many classes.
+- Fixed class filter dropdown not refreshing after saving Settings, you no longer need to refresh the page.
+- Fixed empty-state message showing "No images in dataset" when there are images but the active filter has no matches.
+- Fixed black canvas on first page load when the browser had not finished layout before the image was loaded.
+- Fixed zoom out positioning the image off-center when reaching the minimum zoom level.
+- Right-click context menu on a box is now scrollable when it contains more than 10 classes, instead of overflowing the screen.
+- Right-click context menus now reposition automatically when they would be clipped by the screen edge.
+- Other small bugs and fixes I do not remember now.
+
 ## [0.6.1] - 23-04-2026
 
 - Fixed fp16/32, now by default FP16 will be unchecked, you can still check it if your system supports fp16.
