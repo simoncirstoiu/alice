@@ -21,9 +21,7 @@
       <option value="-1">All classes</option>
       %%CLASS_FILTER_OPTIONS%%
     </select>
-    <div class="toolbar-spacer"></div>
     <span class="toolbar-fileinfo" id="toolbarFileInfo" data-tip="Current image filename and split"></span>
-    <div class="toolbar-sep"></div>
     <button class="btn filter nav-btn" onclick="navigate(-1)" data-tip="Previous image (←)">‹</button>
     <span class="img-counter" onclick="jumpTo()" style="cursor:pointer" data-tip="Click to jump to a specific image number"><b id="imgIdx">0</b> / <span id="imgTotal">0</span></span>
     <button class="btn filter nav-btn" onclick="navigate(1)" data-tip="Next image (→)">›</button>
@@ -76,8 +74,6 @@
     <input type="number" class="num-inp" id="videoStepInput" value="5" min="1" max="100" style="width:42px" onchange="videoStepSize=parseInt(this.value)||5;if(document.getElementById('galleryOverlay').style.display!=='none')renderGallery()" data-tip="Frames per step.">
     <span class="text-base text-t2 font-ui" style="flex-shrink:0">FPS</span>
     <input type="number" class="num-inp" id="videoFpsInput" value="10" min="1" max="60" style="width:42px" onchange="videoPlayFps=parseInt(this.value)||10" data-tip="Playback FPS.">
-    <div class="toolbar-sep"></div>
-    <button class="btn filter" onclick="videoExportFrame()" style="color:var(--acg);border-color:rgba(34,197,94,0.3)" data-tip="Export current frame as JPG to dataset (M)">⤓ Export</button>
   </div>
 
   <!-- Content: Canvas + Panel -->

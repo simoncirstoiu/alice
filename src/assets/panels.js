@@ -622,17 +622,204 @@ function videoTogglePlay() {
   }
 }
 
+// ============================================================
+// VIDEO EXPORT TAB
+// ============================================================
+let _vexpSplit = 'auto';
+let _vexpRunning = false;
+let _vexpStep = 5;
+let _vexpDataset = '';
+// Persistent state survives tab switches
+let _vexpProgress = { pct: 0, label: '', count: '', exported: 0, skipped: 0, done: false, stopped: false, visible: false };
+
+function renderExportTab() {
+  const totalFrames = videoTotalFrames;
+  const est = Math.ceil(totalFrames / _vexpStep);
+  const p = _vexpProgress;
+  const running = _vexpRunning;
+
+  let html = '';
+
+  // Every N-th frame
+  html += '<div class="sec-label">Every N-th frame</div>';
+  html += '<div class="flex gap-6 mb-6" style="align-items:center">';
+  html += '<input type="number" class="num-inp" id="vexpStep" value="' + _vexpStep + '" min="1" max="1000" style="width:60px"' + (running ? ' disabled' : '') + '>';
+  html += '<span class="text-sm text-t2 font-ui" id="vexpEstimate">' + est + ' images</span>';
+  html += '</div>';
+
+  // Dataset
+  html += '<div class="sec-label">Dataset</div>';
+  html += '<select class="sel mb-4" id="vexpDataset" style="width:100%"' + (running ? ' disabled' : '') + '><option>Loading...</option></select>';
+
+  // Split
+  html += '<div class="sec-label">Split</div>';
+  html += '<div class="flex gap-6 mb-6">';
+  html += '<button class="btn sm flex-1' + (_vexpSplit === 'auto' ? ' active' : '') + '" id="vexpSplitAuto" onclick="vexpSetSplit(\'auto\')"' + (running ? ' disabled' : '') + '>Auto (90/10)</button>';
+  html += '<button class="btn sm flex-1' + (_vexpSplit === 'train' ? ' active' : '') + '" id="vexpSplitTrain" onclick="vexpSetSplit(\'train\')"' + (running ? ' disabled' : '') + '>Train</button>';
+  html += '<button class="btn sm flex-1' + (_vexpSplit === 'val' ? ' active' : '') + '" id="vexpSplitVal" onclick="vexpSetSplit(\'val\')"' + (running ? ' disabled' : '') + '>Val</button>';
+  html += '</div>';
+
+  // Progress
+  var pVis = p.visible || running;
+  html += '<div id="vexpProgress" style="' + (pVis ? '' : 'display:none;') + 'margin-bottom:14px">';
+  html += '<div class="flex justify-between text-xs text-t2 font-ui mb-2">';
+  html += '<span id="vexpProgressLabel">' + (p.label || 'Exporting...') + '</span>';
+  html += '<span id="vexpProgressCount">' + (p.count || '0/0') + '</span>';
+  html += '</div>';
+  var barColor = p.done ? (p.stopped ? 'var(--acr)' : 'var(--acg)') : 'var(--acg)';
+  html += '<div class="progress-bar"><div class="progress-fill" id="vexpProgressBar" style="width:' + p.pct + '%;background:' + barColor + '"></div></div>';
+  html += '</div>';
+
+  // Buttons
+  if (running) {
+    html += '<div class="flex gap-6" id="vexpRunningButtons">';
+    html += '<button class="btn sm danger flex-1" onclick="vexpStop()">\u25a0 Stop</button>';
+    html += '</div>';
+  } else if (p.done) {
+    html += '<div class="flex gap-6" id="vexpButtons">';
+    html += '<button class="btn sm flex-1" id="vexpStartBtn" onclick="vexpReset()">\u2713 Done</button>';
+    html += '</div>';
+  } else {
+    html += '<div class="flex gap-6" id="vexpButtons">';
+    html += '<button class="btn sm primary flex-1" id="vexpStartBtn" onclick="vexpStart()" style="color:var(--acg);border-color:rgba(34,197,94,0.3)">\u2913 Export</button>';
+    html += '</div>';
+  }
+
+  return html;
+}
+
+function initExportTab() {
+  // Populate datasets async
+  setTimeout(function() {
+    fetch('/api/datasets').then(function(r) { return r.json(); }).then(function(ds) {
+      var sel = document.getElementById('vexpDataset');
+      if (!sel) return;
+      var viewerDs = (document.getElementById('datasetSel') || {}).value || CONF.DEFAULT_DATASET || '';
+      sel.innerHTML = ds.map(function(d) {
+        var selected = d.path === viewerDs ? ' selected' : '';
+        if (d.path === _vexpDataset) selected = ' selected';
+        return '<option value="' + d.path + '"' + selected + '>' + d.name + '</option>';
+      }).join('');
+      // Persist selection
+      sel.addEventListener('change', function() { _vexpDataset = sel.value; });
+    });
+  }, 50);
+
+  // Estimate updater + persist step
+  var stepInput = document.getElementById('vexpStep');
+  if (stepInput) {
+    stepInput.addEventListener('input', function() {
+      var step = parseInt(stepInput.value) || 5;
+      _vexpStep = step;
+      var est = document.getElementById('vexpEstimate');
+      if (est) est.textContent = Math.ceil(videoTotalFrames / step) + ' images';
+    });
+  }
+}
+
 function videoExportFrame() {
-  const dst = CONF.DEFAULT_DATASET || '';
-  fetch('/api/video/export', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ path: videoCurrentClip, frame: videoCurrentFrame, dst_dataset: dst, dst_split: 'train' })
-  }).then(r => r.json()).then(d => {
-    if (d.ok) toast(`Exported: ${d.name}`);
-    else toast(d.error || 'Error', true);
+  // Context menu / keyboard shortcut -> switch to Export tab
+  setPanelTab('export');
+}
+
+function vexpSetSplit(split) {
+  _vexpSplit = split;
+  ['auto','train','val'].forEach(function(s) {
+    var btn = document.getElementById('vexpSplit' + s.charAt(0).toUpperCase() + s.slice(1));
+    if (btn) btn.classList.toggle('active', s === split);
   });
 }
+
+function vexpResolveSplit(idx) {
+  if (_vexpSplit === 'train') return 'train';
+  if (_vexpSplit === 'val') return 'val';
+  return (idx % 10 === 0) ? 'val' : 'train';
+}
+
+function vexpStop() {
+  _vexpRunning = false;
+}
+
+function vexpReset() {
+  _vexpRunning = false;
+  _vexpProgress = { pct: 0, label: '', count: '', exported: 0, skipped: 0, done: false, stopped: false, visible: false };
+  renderPanelContent();
+}
+
+async function vexpStart() {
+  var dst = (document.getElementById('vexpDataset') || {}).value || _vexpDataset || '';
+  if (!dst) { toast('No dataset selected', true); return; }
+  if (!videoCurrentClip) { toast('No video loaded', true); return; }
+
+  // Persist settings
+  _vexpStep = parseInt((document.getElementById('vexpStep') || {}).value) || 5;
+  _vexpDataset = dst;
+
+  var step = _vexpStep;
+  var totalFrames = videoTotalFrames;
+  var frames = [];
+  for (var f = 0; f < totalFrames; f += step) frames.push(f);
+
+  _vexpRunning = true;
+  _vexpProgress = { pct: 0, label: 'Exporting...', count: '0/' + frames.length, exported: 0, skipped: 0, done: false, stopped: false, visible: true };
+  renderPanelContent();
+
+  var exported = 0, skipped = 0;
+
+  for (var i = 0; i < frames.length; i++) {
+    if (!_vexpRunning) break;
+
+    var frame = frames[i];
+    var split = vexpResolveSplit(i);
+    var pct = Math.round((i + 1) / frames.length * 100);
+
+    _vexpProgress.pct = pct;
+    _vexpProgress.count = (i + 1) + '/' + frames.length;
+    _vexpProgress.label = 'Exporting... ' + exported + ' saved, ' + skipped + ' skipped';
+    _vexpProgress.exported = exported;
+    _vexpProgress.skipped = skipped;
+
+    // Update DOM directly if elements exist (user is on this tab)
+    var barEl = document.getElementById('vexpProgressBar');
+    var countEl = document.getElementById('vexpProgressCount');
+    var labelEl = document.getElementById('vexpProgressLabel');
+    if (barEl) barEl.style.width = pct + '%';
+    if (countEl) countEl.textContent = _vexpProgress.count;
+    if (labelEl) labelEl.textContent = _vexpProgress.label;
+
+    try {
+      var res = await fetch('/api/video/export', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ path: videoCurrentClip, frame: frame, dst_dataset: dst, dst_split: split })
+      }).then(function(r) { return r.json(); });
+      if (res.ok) exported++;
+      else skipped++;
+    } catch (e) {
+      skipped++;
+    }
+  }
+
+  var stopped = !_vexpRunning;
+  _vexpRunning = false;
+  _vexpProgress.done = true;
+  _vexpProgress.stopped = stopped;
+  _vexpProgress.pct = 100;
+  _vexpProgress.exported = exported;
+  _vexpProgress.skipped = skipped;
+  _vexpProgress.label = stopped
+    ? 'Stopped \u2014 ' + exported + ' exported, ' + skipped + ' skipped'
+    : 'Done \u2014 ' + exported + ' exported, ' + skipped + ' skipped';
+  _vexpProgress.count = frames.length + '/' + frames.length;
+
+  // Re-render to show Done state with correct buttons
+  if (panelTab === 'export') renderPanelContent();
+
+  toast(stopped ? 'Stopped: ' + exported + ' exported' : 'Exported ' + exported + ' frames (' + skipped + ' skipped)');
+}
+
+
+
 
 function runVideoAI() {
   if (!requireDep('ultralytics', 'Ultralytics')) return;
@@ -1236,7 +1423,7 @@ function showImageContextMenu(e) {
 
   if (currentMode === 'video') {
     items += `<div style="height:1px;background:var(--bd);margin:2px 0"></div>
-    <div class="ctx-item" style="color:var(--acg)" onclick="closeCtxMenu();videoExportFrame()">⤓ Export Frame</div>`;
+    <div class="ctx-item" style="color:var(--acg)" onclick="closeCtxMenu();videoExportFrame()">⤓ Export</div>`;
   }
 
   m.innerHTML = items;

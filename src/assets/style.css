@@ -179,8 +179,8 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
 .toolbar-fileinfo {
   font-size: var(--fs-sm); color: var(--t1); font-family: var(--font);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  min-width: 0; flex-shrink: 1;
-  text-align: center; flex: 1;
+  min-width: 0; flex-shrink: 1; flex: 1;
+  text-align: center;
 }
 
 .toolbar-video {

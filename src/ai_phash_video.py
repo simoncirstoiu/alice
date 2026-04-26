@@ -199,6 +199,10 @@ def precompute_all_hashes():
 
 def ensure_hashes_computed():
     """Compute hashes using multiprocessing for any images not yet cached."""
+    # Evict deleted files from cache
+    stale = [p for p in PHASH_CACHE if not os.path.exists(p)]
+    for p in stale:
+        del PHASH_CACHE[p]
     paths = []
     for split in ["train", "val"]:
         img_dir = os.path.join(STATE["DATASET_DIR"], "images", split)

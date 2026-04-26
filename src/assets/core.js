@@ -84,7 +84,12 @@ function requireDep(importName, friendlyName) {
 
 function requireModel() {
   const aiSel = document.getElementById('aiModel');
-  const model = aiSel ? aiSel.value : '';
+  let model = aiSel ? aiSel.value : '';
+  // Fallback when AI tab is not rendered: resolve from override / CONF default
+  if (!model) {
+    const target = (modelOverride || CONF.DEFAULT_MODEL || '').split('/').pop();
+    model = (window._modelsList || []).find(m => m.split('/').pop() === target) || '';
+  }
   if (model && (window._modelsList || []).length > 0) return true;
   if ((window._modelsList || []).length === 0) {
     toast('No models available. Download a model from Settings first.', true);
@@ -508,6 +513,7 @@ function updatePanelTabs() {
     tabs = [
       {id:'ai', label:'AI', icon:'ai', tip:'Run AI detection on the current frame.'},
       {id:'scanner', label:'Scanner', icon:'search', tip:'Scan all frames automatically and find interesting ones.'},
+      {id:'export', label:'Export', icon:'export', tip:'Export video frames to dataset.'},
     ];
   }
 
@@ -519,6 +525,7 @@ function updatePanelTabs() {
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
     search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>',
     info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>',
+    export: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
   };
 
   let html = '';
@@ -553,6 +560,7 @@ function renderPanelContent() {
   else if (panelTab === 'dupes' && currentMode === 'dataset') body.innerHTML = renderDupesTab();
   else if (panelTab === 'transfer' && currentMode === 'live') body.innerHTML = renderTransferTab();
   else if (panelTab === 'scanner' && currentMode === 'video') body.innerHTML = renderScannerTab();
+  else if (panelTab === 'export' && currentMode === 'video') { body.innerHTML = renderExportTab(); initExportTab(); }
   else body.innerHTML = '';
 }
 
@@ -605,6 +613,8 @@ function loadImage(idx) {
       undoStack = [];
       // Reset dupe cache for new image
       if (typeof _dupeResultsHTML !== 'undefined') _dupeResultsHTML = '';
+      window._dupeList = [];
+      window._dupeCurrentIdx = 0;
 
       img = new Image();
       img.onload = () => {
@@ -654,9 +664,9 @@ function clearCanvas() {
 }
 
 function updatePanelInfo() {
-  if (panelTab === 'edit') renderPanelContent();
+  if (panelTab === 'edit' || panelTab === 'dupes') renderPanelContent();
   const tfi = document.getElementById('toolbarFileInfo');
-  if (tfi) tfi.textContent = `${currentName} • ${currentSplit} • ${boxes.length} boxes`;
+  if (tfi) tfi.textContent = `/${currentSplit}/${currentName} • ${boxes.length} boxes`;
 }
 
 function setFilter(f) {

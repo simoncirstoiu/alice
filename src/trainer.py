@@ -398,7 +398,7 @@ def trainer_dedup_boxes(iou_threshold, dry_run=False):
 
 
 def trainer_dedup_phash(hamming_threshold, dry_run=False):
-    """Deduplicate images per camera using perceptual hash."""
+    """Deduplicate images per camera using perceptual hash (cross-split), then redistribute 90/10."""
     _log(f"{'=' * 50}")
     _log(f"DEDUP pHASH: hamming_threshold={hamming_threshold}, dry_run={dry_run}")
     camera_map = _load_camera_map()
@@ -419,60 +419,94 @@ def trainer_dedup_phash(hamming_threshold, dry_run=False):
     processed = 0
     _ss_set("dedup", message=f"pHash: hashing {all_image_count} images...")
 
+    # Collect all images per camera across both splits
+    camera_groups = defaultdict(list)
     for split in ["train", "val"]:
         images_dir = os.path.join(STATE["DATASET_DIR"], "images", split)
         labels_dir = os.path.join(STATE["DATASET_DIR"], "labels", split)
         if not os.path.exists(images_dir):
             continue
-
-        image_files = _glob_images(images_dir)
-        if not image_files:
-            continue
-
-        camera_groups = defaultdict(list)
-        for img_path in image_files:
+        for img_path in _glob_images(images_dir):
             event_id = Path(img_path).stem
             camera = camera_map.get(event_id, "unknown")
             label_path = os.path.join(labels_dir, f"{event_id}.txt")
-            camera_groups[camera].append((img_path, label_path))
+            camera_groups[camera].append((img_path, label_path, split))
 
-        for camera, items in camera_groups.items():
-            hashes = []
-            valid_items = []
-            for img_path, label_path in items:
-                if not _ss("dedup").get("running", False):
-                    return {"ok": False, "error": "Stopped", "removed": total_removed, "kept": total_kept}
-                h = compute_phash(img_path)
-                if h is not None:
-                    hashes.append(h)
-                    valid_items.append((img_path, label_path))
-                processed += 1
-                if processed % 10 == 0 or processed == all_image_count:
-                    pct = int(processed / max(all_image_count, 1) * 100)
-                    _ss_set("dedup", message=f"pHash: {processed}/{all_image_count} hashed, {total_removed} dupes — {camera} ({split})", progress=pct)
+    # Phase 1: deduplicate cross-split per camera
+    kept_all = []  # list of (img_path, label_path, current_split)
 
-            kept_hashes = []
-            removed = 0
+    for camera, items in camera_groups.items():
+        hashes = []
+        valid_items = []
+        for img_path, label_path, split in items:
+            if not _ss("dedup").get("running", False):
+                return {"ok": False, "error": "Stopped", "removed": total_removed, "kept": total_kept}
+            h = compute_phash(img_path)
+            if h is not None:
+                hashes.append(h)
+                valid_items.append((img_path, label_path, split))
+            processed += 1
+            if processed % 10 == 0 or processed == all_image_count:
+                pct = int(processed / max(all_image_count, 1) * 50)
+                _ss_set("dedup", message=f"pHash: {processed}/{all_image_count} hashed, {total_removed} dupes — {camera}", progress=pct)
 
-            for i, (img_path, label_path) in enumerate(valid_items):
-                is_dup = False
-                for kh in kept_hashes:
-                    dist = bin(hashes[i] ^ kh).count('1')
-                    if dist <= hamming_threshold:
-                        is_dup = True
-                        break
-                if is_dup:
-                    if not dry_run:
-                        os.remove(img_path)
-                        if os.path.exists(label_path):
-                            os.remove(label_path)
-                    removed += 1
-                else:
-                    kept_hashes.append(hashes[i])
+        kept_hashes = []
+        removed = 0
 
-            total_removed += removed
-            total_kept += len(kept_hashes)
-            _ss_set("dedup", message=f"pHash: {camera} ({split}) — {removed} removed, {len(kept_hashes)} kept")
+        for i, (img_path, label_path, split) in enumerate(valid_items):
+            is_dup = False
+            for kh in kept_hashes:
+                dist = bin(hashes[i] ^ kh).count('1')
+                if dist <= hamming_threshold:
+                    is_dup = True
+                    break
+            if is_dup:
+                if not dry_run:
+                    os.remove(img_path)
+                    if os.path.exists(label_path):
+                        os.remove(label_path)
+                removed += 1
+            else:
+                kept_hashes.append(hashes[i])
+                kept_all.append((img_path, label_path, split))
+
+        total_removed += removed
+        total_kept += len(kept_hashes)
+        _ss_set("dedup", message=f"pHash: {camera} — {removed} removed, {len(kept_hashes)} kept")
+
+    # Phase 2: redistribute kept images 90/10 train/val
+    if not dry_run and kept_all:
+        _ss_set("dedup", message=f"pHash: redistributing {len(kept_all)} images 90/10...", progress=80)
+        _log(f"DEDUP pHASH: redistributing {len(kept_all)} images 90/10...")
+
+        random.shuffle(kept_all)
+        val_count = max(1, round(len(kept_all) * 0.1))
+        train_count = len(kept_all) - val_count
+        moved = 0
+
+        for idx, (img_path, label_path, current_split) in enumerate(kept_all):
+            target_split = "val" if idx < val_count else "train"
+            if target_split == current_split:
+                continue
+
+            # Move image
+            event_id = Path(img_path).stem
+            ext = Path(img_path).suffix
+            target_img_dir = os.path.join(STATE["DATASET_DIR"], "images", target_split)
+            target_lbl_dir = os.path.join(STATE["DATASET_DIR"], "labels", target_split)
+            os.makedirs(target_img_dir, exist_ok=True)
+            os.makedirs(target_lbl_dir, exist_ok=True)
+
+            target_img = os.path.join(target_img_dir, f"{event_id}{ext}")
+            target_lbl = os.path.join(target_lbl_dir, f"{event_id}.txt")
+
+            shutil.move(img_path, target_img)
+            if os.path.exists(label_path):
+                shutil.move(label_path, target_lbl)
+            moved += 1
+
+        _log(f"DEDUP pHASH: redistributed — {moved} moved, {train_count} train / {val_count} val")
+        _ss_set("dedup", message=f"pHash: done — {total_removed} removed, {moved} redistributed ({train_count}T/{val_count}V)", progress=100)
 
     _log(f"DEDUP pHASH: COMPLETED — {total_removed} removed, {total_kept} kept")
     return {"ok": True, "removed": total_removed, "kept": total_kept}

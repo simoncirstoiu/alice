@@ -3,6 +3,12 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.3] - 25-04-2026
+
+- Added bulk video frames export under Video section.
+- Fixed image name clipping.
+- Fixed builder venv setup.
+
 ## [0.6.2] - 25-04-2026
 
 - Fixed canvas getting stuck and showing 400 errors when editing the current image dropped it out of an active class filter. Thanks @ngk0 for the bug report in #2.

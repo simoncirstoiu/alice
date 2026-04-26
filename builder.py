@@ -367,16 +367,15 @@ def setup_venv(output_path):
 
     if os.path.exists(venv_python):
         print(f"\n  venv: {venv_dir} (already exists)")
-        return
+    else:
+        print(f"\n  Creating venv: {venv_dir}")
+        import venv
+        venv.create(venv_dir, with_pip=True)
 
-    print(f"\n  Creating venv: {venv_dir}")
-    import venv
-    venv.create(venv_dir, with_pip=True)
+        print(f"  Installing: Pillow")
+        subprocess.run([venv_python, "-m", "pip", "install", "--quiet", "Pillow"], check=True)
 
-    print(f"  Installing: Pillow")
-    subprocess.run([venv_python, "-m", "pip", "install", "--quiet", "Pillow"], check=True)
-
-    # Patch shebang in alice.py to point to venv python
+    # Patch shebang in alice.py to point to venv python (every build)
     with open(output_path) as f:
         content = f.read()
     if content.startswith("#!/usr/bin/env python3"):
