@@ -86,6 +86,16 @@
         <span id="emptyStateText" style="font-size:var(--fs-md);color:var(--t2);font-family:var(--fontUI);text-align:center;max-width:300px;line-height:1.6">No images in dataset.<br><span style="font-size:var(--fs-sm);color:var(--t3)">Use Live mode to import snapshots, or run the Export step in Trainer.</span></span>
       </div>
       <div id="galleryOverlay" style="display:none;position:absolute;inset:0;background:var(--bg0);overflow-y:auto;z-index:5;padding:var(--pad-lg)"></div>
+
+      <!-- Paging buttons for touch. Hidden unless there is no mouse; see the
+           (hover: none) rule in style.css. They sit in the letterbox: in
+           portrait a 16:9 frame leaves ~300px of dead black below the image,
+           so these cost nothing and, unlike the two-finger swipe, they cannot
+           be mistaken for the one-finger drag that draws a box. -->
+      <div class="canvas-nav" id="canvasNav">
+        <button class="canvas-nav-btn" onclick="navigate(-1)" aria-label="Previous image">&lsaquo;</button>
+        <button class="canvas-nav-btn" onclick="navigate(1)" aria-label="Next image">&rsaquo;</button>
+      </div>
     </div>
 
     <div class="panel" id="panel">
@@ -120,7 +130,7 @@
     <button class="btn filter" data-ttab="logs" onclick="setTrainerTab('logs')">Logs</button>
   </div>
 
-  <div style="display:flex;flex:1;overflow:hidden;width:100%">
+  <div class="trainer-body" style="display:flex;flex:1;overflow:hidden;width:100%">
     <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
       <div class="trainer-content" id="trainerContent" style="flex:1"></div>
     </div>
@@ -216,7 +226,7 @@
 
     <!-- TAB: AI -->
     <div class="settings-panel" id="stab-ai" style="max-width:900px">
-      <div style="display:grid;grid-template-columns:1fr 280px;gap:24px;width:100%;margin-bottom:24px">
+      <div class="form-row" style="--cols:1fr 280px;gap:24px;width:100%;margin-bottom:24px">
       <div class="settings-card" style="margin-bottom:0">
         <h3>AI Defaults</h3>
         <div class="flex-col gap-14">

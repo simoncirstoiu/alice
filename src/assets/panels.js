@@ -20,7 +20,7 @@ function renderEditTab() {
       <div style="flex:1">
         <div class="box-name">${name}</div>
       </div>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--bd2)" stroke-width="2" style="cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();deleteBox(${i})"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      <svg class="box-del" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--bd2)" stroke-width="2" style="cursor:pointer;flex-shrink:0" onclick="event.stopPropagation();deleteBox(${i})"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </div>`;
   }
 
@@ -30,7 +30,7 @@ function renderEditTab() {
     <button class="btn sm" onclick="popUndo()" data-tip="Undo last box edit (Ctrl+Z)">↩ Undo</button>
     <button class="btn sm" onclick="openCopyMove('copy')" data-tip="Copy this image + label to another dataset">Copy</button>
     <button class="btn sm" onclick="openCopyMove('move')" data-tip="Move this image + label to another dataset">Move</button>
-    <button class="btn sm danger" onclick="deleteImage()" data-tip="Permanently delete this image and its label file">Delete</button>
+    <button class="btn sm danger" onclick="deleteImage()" data-tip="Permanently delete this image and its label file">Delete image</button>
   </div>`;
 
   html += '<div class="divider"></div>';
@@ -41,8 +41,17 @@ function renderEditTab() {
     html += `<option value="${c}">${c}: ${CN[c] || c}</option>`;
   }
   html += '</select>';
-  html += '<div class="text-hint">Click + drag on canvas to draw. Right-click to select.</div>';
+  // Two hints, one shown. The instructions genuinely differ by input device --
+  // there is no right-click and no "click + drag" on a phone, and paging moved
+  // to two fingers because one finger draws. Which one shows is decided in CSS
+  // by (hover: none), i.e. by whether there is a pointer, not by window width:
+  // a narrow desktop window should still read the mouse instructions.
+  html += '<div class="text-hint hint-pointer">Click + drag on canvas to draw. Right-click to select.</div>';
+  html += '<div class="text-hint hint-touch">Drag on the image to draw a box. Use the &lsaquo; &rsaquo; buttons on the image, or swipe with <b>two fingers</b>, to change image.</div>';
 
+  // Wrapped so a narrow viewport can drop it: it is the tallest block in the
+  // panel and it is a keyboard legend on a device with no keyboard.
+  html += '<div class="edit-shortcuts">';
   html += '<div class="divider"></div>';
   html += '<div class="sec-label">Keyboard Shortcuts</div>';
   html += '<div style="font-size:var(--fs-sm);color:var(--t2);font-family:var(--font);line-height:2.4">';
@@ -57,6 +66,7 @@ function renderEditTab() {
       <span style="font-size:var(--fs-sm)">${desc}</span>
     </div>`;
   }
+  html += '</div>';
   html += '</div>';
 
   return html;
@@ -210,7 +220,7 @@ function renderStatsTab() {
   fetch('/api/stats').then(r => r.json()).then(d => {
     const el = document.getElementById('statsContent');
     if (!el) return;
-    let h = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">';
+    let h = '<div class="form-row" style="--cols:1fr 1fr;gap:8px;margin-bottom:12px">';
     const cards = [
       { label: 'Total', value: d.total, color: 'var(--t0)' },
       { label: 'Train', value: d.train, color: 'var(--ac)' },
@@ -1437,7 +1447,12 @@ function showImageContextMenu(e) {
 }
 
 function deleteImage() {
-  if (!confirm(`Delete ${currentName}?`)) return;
+  // Name the thing being destroyed, not just the file it lives in. "Delete
+  // <name>?" reads as "delete the box in <name>?" to anyone who arrived here
+  // expecting the button to remove an annotation.
+  if (!confirm(`Delete the IMAGE ${currentName} and its label file?\n\n`
+              + `This removes the picture from the dataset permanently. `
+              + `To remove a box instead, use the x next to it in Annotations.`)) return;
   const tip = document.getElementById('tipPopup');
   if (tip) tip.style.display = 'none';
   fetch('/api/del', {

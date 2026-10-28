@@ -85,6 +85,10 @@ function toggleTrainerSteps() {
   const btn = document.getElementById('trainerToggle');
   const arrow = btn.querySelector('.arrow');
   if (arrow) arrow.textContent = trainerStepsOpen ? '›' : '‹';
+  // Narrow viewports show this as an overlay drawer, same as the sidebar, so
+  // only one of the two can usefully be open at once.
+  if (trainerStepsOpen && typeof isNarrowViewport === 'function' && isNarrowViewport()
+      && typeof sidebarIsOpen === 'function' && sidebarIsOpen()) toggleSidebar();
 }
 
 let pipelineRunning = false;
@@ -209,7 +213,7 @@ function renderExportStep() {
   </div>
 
   <div id="exportDBSection" ${dbVis}>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+    <div class="form-row" style="--cols:1fr 1fr;gap:16px;margin-bottom:18px">
       <div><div class="sec-label" data-tip="Path to Frigate SQLite database file. Used to query event IDs and camera names.">Frigate DB Path</div><input class="inp" id="exportDB" value="${CONF.FRIGATE_DB || ''}"></div>
       <div><div class="sec-label" data-tip="Directory where Frigate stores clean snapshot WebP files for each event.">Clips Directory</div><input class="inp" id="exportClips" value="${CONF.LIVE_DIR || ''}"></div>
     </div>
@@ -218,7 +222,7 @@ function renderExportStep() {
     <div style="margin-bottom:18px"><div class="sec-label" data-tip="Path to a folder containing images (.jpg, .png, .webp) to import into the dataset.">Source Folder</div><input class="inp" id="exportInputDir" value="" placeholder="/path/to/images/"></div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+  <div class="form-row" style="--cols:1fr 1fr;gap:16px;margin-bottom:24px">
     <div><div class="sec-label" data-tip="Target dataset directory. Images are saved to images/train and images/val subdirectories.">Output Dataset</div><input class="inp" id="exportDataset" value="${CONF.DEFAULT_DATASET || ''}"></div>
     <div><div class="sec-label" data-tip="Maximum number of images to export. Set to 0 to export everything available.">Max Images <span style="font-weight:400;color:var(--t2)">(0 = no limit)</span></div><input type="number" class="num-inp w-full" id="exportMaxImages" value="100" min="0" max="999999"></div>
   </div>
@@ -231,7 +235,7 @@ function renderExportStep() {
 
 function renderDedupStep() {
   return `
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px">
+  <div class="form-row" style="--cols:1fr 1fr 1fr;gap:12px;margin-bottom:24px">
     <div class="gpu-card" style="padding:var(--pad-lg);position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center">
       <input type="checkbox" id="dedupBoxes" ${CONF.DEDUP_BOXES ? 'checked' : ''} style="accent-color:var(--ac);width:16px;height:16px;position:absolute;top:14px;left:14px;cursor:pointer">
       <span class="badge badge-green" style="position:absolute;top:12px;right:12px">Fast</span>
@@ -274,7 +278,7 @@ function renderDedupStep() {
 
 function renderAnnotateStep() {
   return `
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:18px">
+  <div class="form-row" style="--cols:2fr 1fr;gap:16px;margin-bottom:18px">
     <div><div class="sec-label" data-tip="Large, accurate model used to generate ground-truth labels. This model runs inference on every image to create bounding box annotations.">Teacher Model</div>
       <select class="sel w-full" id="annotateTeacher">
         ${(window._modelsList || []).map(m => {
@@ -355,7 +359,7 @@ function runAnnotate() {
 
 function renderTrainStep() {
   return `
-  <div style="display:grid;grid-template-columns:2fr auto;gap:14px;align-items:end;margin-bottom:20px">
+  <div class="form-row" style="--cols:2fr auto;gap:14px;align-items:end;margin-bottom:20px">
     <div><div class="sec-label" data-tip="Smaller model to fine-tune on your dataset. This is the model that will be deployed. Starts from pretrained weights and learns your specific objects.">Base Model (Student)</div>
       <select class="sel w-full" id="trainModel">
         ${(window._modelsList || []).map(m => {
@@ -368,7 +372,7 @@ function renderTrainStep() {
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:14px">
+  <div class="form-row" style="--cols:1fr 1fr 1fr;gap:16px;margin-bottom:14px">
     <div><div class="sec-label" data-tip="Number of training epochs.">Epochs</div><input type="number" class="num-inp w-full" id="trainEpochs" value="${CONF.EPOCHS || 10}"></div>
     <div><div class="sec-label" data-tip="Images per batch. Lower if OOM.">Batch Size</div><input type="number" class="num-inp w-full" id="trainBatch" value="${CONF.BATCH_SIZE || 8}"></div>
     <div><div class="sec-label" data-tip="Input image resolution.">Image Size</div><input type="number" class="num-inp w-full" id="trainImgsz" value="${CONF.IMAGE_SIZE || 640}" step="32"></div>
@@ -391,7 +395,7 @@ function renderTrainStep() {
 
 function renderOnnxStep() {
   return `
-  <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:14px;margin-bottom:18px">
+  <div class="form-row" style="--cols:2fr 1fr 1fr;gap:14px;margin-bottom:18px">
     <div><div class="sec-label" data-tip="The .pt model to convert. Usually the fine-tuned model from the Train step.">Source Model</div>
       <select class="sel w-full" id="onnxModel">
         ${(window._modelsList || []).map(m => {
