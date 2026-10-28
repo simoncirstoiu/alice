@@ -53,12 +53,7 @@ body {
   background: var(--bg0); color: var(--t0);
   font-family: var(--fontUI); font-size: var(--fs-base);
   overflow: hidden; width: 100vw;
-  /* 100vh on a mobile browser is the LARGE viewport -- the height the page
-     would have if the URL bar were hidden -- so the bottom of the layout sits
-     underneath the visible URL bar and is simply not there. That is invisible
-     in headless testing, which has no browser chrome. dvh is the viewport as
-     it actually is right now; the vh line stays first as the fallback for
-     browsers that do not know dvh. */
+  /* dvh = visible viewport on mobile, vh is the fallback. */
   height: 100vh;
   height: 100dvh;
   display: flex;
@@ -300,11 +295,7 @@ input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; marg
   min-width: 0; min-height: 0;
 }
 
-/* touch-action: none is load-bearing, not a tidy-up. Without it the browser
-   treats a one-finger drag across the canvas as a pan, takes the gesture over
-   and stops delivering pointermove -- which is exactly why a box could not be
-   drawn by touch. The canvas has its own pan and zoom, so there is nothing
-   here for the browser to scroll anyway. */
+/* touch-action: none lets touch drags draw boxes instead of panning. */
 canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: crosshair; touch-action: none; }
 
 .selection-badge {
@@ -688,14 +679,9 @@ canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 10
 .font-ui { font-family: var(--fontUI); }
 .text-hint { font-size: var(--fs-sm); color: var(--t2); margin-top: 4px; line-height: 1.5; }
 
-/* Device-specific instructions. Keyed on (hover: none) rather than on the
-   width breakpoint everything else uses, because the question here is "is
-   there a mouse", not "is the window narrow". */
+/* Touch-only hint and paging buttons. */
 .hint-touch { display: none; }
 
-/* Paging buttons over the canvas, for touch only. The row spans the canvas so
-   the two buttons sit in opposite bottom corners, away from the middle where
-   boxes get drawn; it is click-through except for the buttons themselves. */
 .canvas-nav { display: none; }
 .canvas-nav-btn { display: none; }
 
@@ -790,55 +776,27 @@ canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 10
 }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* Two- and three-column form rows across the trainer, the panel and the
-   settings page. The column spec stays at the call site in --cols so each
-   layout still reads where it is used; keeping it in a custom property rather
-   than in grid-template-columns directly is what lets the narrow-viewport
-   rule below collapse them to one column without !important. */
+/* Columns set per row via --cols, collapsed to one on narrow screens. */
 .form-row { display: grid; grid-template-columns: var(--cols, 1fr); }
 
-/* Positioning context for .trainer-steps, which becomes an overlay drawer on
-   a narrow viewport (see below). No effect on the desktop layout. */
 .trainer-body { position: relative; }
 
 /* ============================================================
-   NARROW VIEWPORTS — phones and small tablets
-   ============================================================
-   The desktop layout is one flex row: .sidebar (min 180px) + .canvas-area +
-   .panel (min 260px). That is 440px of chrome before the image gets a single
-   pixel, so on a 412px-wide phone .canvas-area is squeezed to 0 and the
-   annotation canvas is simply not there.
-
-   Below the breakpoint the two chrome columns stop competing with the canvas
-   for row width. Collapsed, they stay in flow as the same narrow rails used
-   on desktop. Expanded, they lift out of flow and float over the canvas as
-   drawers, so the image always has the full viewport underneath it.
-
-   Each drawer keeps its own collapse button (.sidebar-collapse-btn and
-   .panel-collapse-btn live inside the elements), so there is always a way
-   back without needing a scrim or any new markup. */
+   NARROW VIEWPORTS (phones, small tablets)
+   ============================================================ */
 @media (max-width: 860px) {
-  /* Collapsed: the rail, in flow. Same widths as .collapsed uses. */
+  /* Collapsed: narrow rails. */
   .sidebar { width: 58px; min-width: 58px; }
   .panel   { width: 42px; min-width: 42px; }
 
-  /* Expanded: an overlay. `fixed` because the sidebar's flex parent is <body>,
-     which is not a positioned ancestor. */
+  /* Expanded sidebar: overlay drawer. */
   .sidebar:not(.collapsed) {
     position: fixed; top: 0; left: 0; bottom: 0;
     width: min(78vw, 230px); min-width: 0;
     z-index: 60; box-shadow: 6px 0 28px rgba(0, 0, 0, 0.55);
   }
 
-  /* The panel goes to the BOTTOM rather than the side, and stays in flow
-     instead of overlaying, so the image and the controls are visible at the
-     same time. That is affordable because of how the canvas actually fills on
-     a phone: measured at 412x915 with a 16:9 camera frame, the canvas area is
-     312x868 and the image renders 308x252 inside it -- width-constrained, with
-     308px of dead black above and 308px below. 71% of the canvas area is
-     letterbox that the image can never use in portrait. Taking some of it for
-     the panel costs the image nothing; the cap below leaves 365px of canvas
-     for an image that needs 252px. */
+  /* Panel docks at the bottom, below the image. */
   .content { flex-direction: column; }
   .panel {
     width: auto; min-width: 0;
@@ -847,15 +805,7 @@ canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 10
     border-left: none; border-top: 1px solid var(--bd);
     transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   }
-  /* min-height as well as max: collapsed, the only child left is the label,
-     which is 16px of text. Without a floor the strip shrinks to fit it and
-     the one control that reopens the panel becomes a 17px tap target. */
   .panel.collapsed { width: auto; min-width: 0; max-height: 46px; min-height: 46px; }
-  /* Collapsed, the rail is a strip along the bottom, so its label reads left
-     to right and sits beside the icon rather than under it. The strip is only
-     46px tall and the label is already clickable (onclick="togglePanel()"), so
-     the separate collapse button would be a second, redundant control fighting
-     it for the same space -- hide it and let the whole strip be the target. */
   .panel.collapsed .panel-collapsed-label {
     flex-direction: row; justify-content: center; align-items: center;
     padding: 0; gap: 8px; flex: 1;
@@ -863,32 +813,18 @@ canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 10
   .panel.collapsed .panel-collapsed-label span { writing-mode: horizontal-tb; }
   .panel.collapsed .panel-collapse-btn { display: none; }
 
-  /* The chevron was drawn for a panel that opened sideways. A quarter turn
-     makes it point the way this one actually moves, in both states: the JS
-     already flips the glyph between '>' and '<'. */
   .panel .panel-collapse-btn .arrow,
   .panel .panel-collapsed-label svg { transform: rotate(90deg); }
 
-  /* A keyboard legend on a device with no keyboard, and the tallest block in
-     the panel by some margin. */
   .edit-shortcuts { display: none; }
 
-  /* The two delete affordances are inverted on touch. Removing a BOX -- the
-     recoverable one, Ctrl+Z brings it back -- is a 12px glyph, while deleting
-     the IMAGE is a full-size button and cannot be undone at all. Grow the
-     hit area of the small one to a real touch target. Negative margin cancels
-     the padding so nothing moves; only the region that responds changes. */
+  /* Bigger tap target for the per-box delete x. */
   .box-item .box-del {
     padding: 16px; margin: -16px; box-sizing: content-box; overflow: visible;
   }
   .box-item { overflow: visible; }
 
-  /* The toolbars are `overflow: hidden` flex rows sized for a desktop. At
-     412px the dataset toolbar holds 493px of content in a 354px box and the
-     settings toolbar holds 782px, so the next-image button, the gallery
-     button, the Dedup / Interface / System tabs and the Save button all sit
-     past the edge with no way to reach them at all. Scroll the strip sideways
-     instead of clipping it. */
+  /* Toolbars scroll sideways instead of clipping. */
   .toolbar {
     overflow-x: auto; overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
@@ -896,28 +832,15 @@ canvas#mainCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 10
   }
   .toolbar::-webkit-scrollbar { display: none; }
 
-  /* ...and stop the flex children absorbing the shortfall on the way there.
-     Without this the two <select>s in the dataset toolbar shrink to 18px,
-     which is narrower than their own dropdown arrow. */
   .toolbar > * { flex-shrink: 0; }
   .toolbar .sel { min-width: 8.5rem; }
 
-  /* Pull prev / counter / next to the front of the scrollable toolbar. They
-     are the controls reached most often and they sat behind the dataset
-     select, four filter buttons and the class filter, so paging meant swiping
-     the strip sideways every time. Flex keeps DOM order within one `order`
-     value, so the three stay in sequence. */
+  /* Paging controls first in the toolbar. */
   .toolbar .nav-btn, .toolbar .img-counter { order: -1; }
 
-  /* Multi-column form rows become one column. At 412px the trainer's
-     2fr/1fr/1fr row leaves its path inputs 46-62px wide, which shows about
-     four characters of a filesystem path. */
   .form-row { grid-template-columns: 1fr; }
 
-  /* The trainer has a third fixed column of its own, .trainer-steps, with the
-     same 220px floor and the same collapse button as .panel. Left alone it
-     takes the trainer content down to about 160px no matter what the form
-     rows do, so it gets the identical drawer treatment. */
+  /* Trainer steps: overlay drawer, like the sidebar. */
   .trainer-steps { width: 42px; min-width: 42px; }
   .trainer-steps:not(.collapsed) {
     position: absolute; top: 0; right: 0; bottom: 0;

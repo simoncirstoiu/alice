@@ -87,11 +87,7 @@
       </div>
       <div id="galleryOverlay" style="display:none;position:absolute;inset:0;background:var(--bg0);overflow-y:auto;z-index:5;padding:var(--pad-lg)"></div>
 
-      <!-- Paging buttons for touch. Hidden unless there is no mouse; see the
-           (hover: none) rule in style.css. They sit in the letterbox: in
-           portrait a 16:9 frame leaves ~300px of dead black below the image,
-           so these cost nothing and, unlike the two-finger swipe, they cannot
-           be mistaken for the one-finger drag that draws a box. -->
+      <!-- Paging buttons, touch only. -->
       <div class="canvas-nav" id="canvasNav">
         <button class="canvas-nav-btn" onclick="navigate(-1)" aria-label="Previous image">&lsaquo;</button>
         <button class="canvas-nav-btn" onclick="navigate(1)" aria-label="Next image">&rsaquo;</button>

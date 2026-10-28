@@ -3,10 +3,22 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.5] - 28-10-2026
+
+- Basic mobile support: on narrow screens the sidebar and panel become drawers, toolbars scroll, forms stack, and boxes can be drawn by touch.
+  ALICE is still a desktop tool first.
+  Thanks @aemitic for #11.
+- Fixed a two-finger swipe on a touch screen saving a stray box before changing image.
+- Arrow keys now step frames in Video mode.
+- A new box can no longer be started outside the image.
+- The image delete button now reads "Delete image" and its confirmation says clearly what is removed.
+
 ## [0.6.4] - 28-10-2026
 
-- Frigate's database is now opened strictly read-only, ALICE never asks for write access to it. Thanks @aemitic for the fix in #6 and @kevin-vcc for reporting it in #12.
-- Fixed the export step silently missing the newest Frigate events when only `frigate.db` was mounted in Docker. Mount the directory that holds it instead and set `FRIGATE_DB = /app/frigate/frigate.db` (see Docker Setup in the README).
+- Frigate's database is now opened strictly read-only, ALICE never asks for write access to it.
+  Thanks @aemitic for the fix in #6 and @kevin-vcc for reporting it in #12.
+- Fixed the export step silently missing the newest Frigate events when only `frigate.db` was mounted in Docker.
+  Mount the directory that holds it instead and set `FRIGATE_DB = /app/frigate/frigate.db` (see Docker Setup in the README).
 - Clearer error message when the Frigate database cannot be opened.
 - Fixed opening the Frigate database from a path containing `?`, `#` or `%`.
 - Added a README security note about mounting Frigate's config directory.

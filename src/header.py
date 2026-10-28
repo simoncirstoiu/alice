@@ -27,7 +27,7 @@ from urllib.parse import unquote, parse_qs
 from collections import defaultdict, deque
 from typing import Any, Optional
 
-VERSION = "0.6.4"
+VERSION = "0.6.5"
 
 # ============================================================
 # CONFIGURATION DEFAULTS

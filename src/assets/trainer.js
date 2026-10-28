@@ -85,8 +85,7 @@ function toggleTrainerSteps() {
   const btn = document.getElementById('trainerToggle');
   const arrow = btn.querySelector('.arrow');
   if (arrow) arrow.textContent = trainerStepsOpen ? '›' : '‹';
-  // Narrow viewports show this as an overlay drawer, same as the sidebar, so
-  // only one of the two can usefully be open at once.
+  // On narrow screens only one drawer stays open.
   if (trainerStepsOpen && typeof isNarrowViewport === 'function' && isNarrowViewport()
       && typeof sidebarIsOpen === 'function' && sidebarIsOpen()) toggleSidebar();
 }

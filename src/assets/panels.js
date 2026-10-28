@@ -41,16 +41,11 @@ function renderEditTab() {
     html += `<option value="${c}">${c}: ${CN[c] || c}</option>`;
   }
   html += '</select>';
-  // Two hints, one shown. The instructions genuinely differ by input device --
-  // there is no right-click and no "click + drag" on a phone, and paging moved
-  // to two fingers because one finger draws. Which one shows is decided in CSS
-  // by (hover: none), i.e. by whether there is a pointer, not by window width:
-  // a narrow desktop window should still read the mouse instructions.
+  // Mouse or touch hint, picked in CSS by (hover: none).
   html += '<div class="text-hint hint-pointer">Click + drag on canvas to draw. Right-click to select.</div>';
   html += '<div class="text-hint hint-touch">Drag on the image to draw a box. Use the &lsaquo; &rsaquo; buttons on the image, or swipe with <b>two fingers</b>, to change image.</div>';
 
-  // Wrapped so a narrow viewport can drop it: it is the tallest block in the
-  // panel and it is a keyboard legend on a device with no keyboard.
+  // Hidden on narrow screens.
   html += '<div class="edit-shortcuts">';
   html += '<div class="divider"></div>';
   html += '<div class="sec-label">Keyboard Shortcuts</div>';
@@ -1447,9 +1442,6 @@ function showImageContextMenu(e) {
 }
 
 function deleteImage() {
-  // Name the thing being destroyed, not just the file it lives in. "Delete
-  // <name>?" reads as "delete the box in <name>?" to anyone who arrived here
-  // expecting the button to remove an annotation.
   if (!confirm(`Delete the IMAGE ${currentName} and its label file?\n\n`
               + `This removes the picture from the dataset permanently. `
               + `To remove a box instead, use the x next to it in Annotations.`)) return;
