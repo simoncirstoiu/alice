@@ -480,12 +480,7 @@ def generate_docker_compose(output_path):
       - /path/to/frigate/clips:/app/clips:ro
       - /path/to/frigate/exports:/app/exports:ro
 
-      # frigate.db — mount the DIRECTORY that holds it, not the file itself.
-      # A single-file bind mount is pinned to one inode, so if anything ever
-      # replaces the database by rename (a `.backup` copy published on a timer,
-      # for instance) the container keeps the old inode and every read fails
-      # with "Stale file handle" until it is recreated. Then set
-      # FRIGATE_DB = /app/frigate/frigate.db in alice.conf.
+      # Directory holding frigate.db (not the file), then set FRIGATE_DB = /app/frigate/frigate.db.
       - /path/to/frigate:/app/frigate:ro
 
       # Persist installed dependencies across container restarts

@@ -3,6 +3,14 @@
 All notable changes to ALICE will be documented in this file.
 Entries are ordered newest first.
 
+## [0.6.4] - 28-10-2026
+
+- Frigate's database is now opened strictly read-only, ALICE never asks for write access to it. Thanks @aemitic for the fix in #6 and @kevin-vcc for reporting it in #12.
+- Fixed the export step silently missing the newest Frigate events when only `frigate.db` was mounted in Docker. Mount the directory that holds it instead and set `FRIGATE_DB = /app/frigate/frigate.db` (see Docker Setup in the README).
+- Clearer error message when the Frigate database cannot be opened.
+- Fixed opening the Frigate database from a path containing `?`, `#` or `%`.
+- Added a README security note about mounting Frigate's config directory.
+
 ## [0.6.3] - 25-04-2026
 
 - Added bulk video frames export under Video section.

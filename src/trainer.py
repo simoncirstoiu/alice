@@ -48,41 +48,20 @@ def _ss_reset(step, **kwargs):
     s.update(kwargs)
 
 def _open_frigate_db(path):
-    """Open Frigate's SQLite database for reading, read-only.
+    """Open Frigate's SQLite database read-only.
 
-    ALICE only ever SELECTs here, and the setup the README and the generated
-    docker-compose.yml describe mounts this path `:ro`. A plain
-    sqlite3.connect() asks for a read-write handle anyway, which fails on that
-    mount -- and Frigate runs its database in WAL mode by default, so even an
-    explicit `mode=ro` fails: opening a WAL database means creating a `-shm`
-    sidecar next to it, and the mount forbids that. The error is
-    "attempt to write a readonly database" or "unable to open database file"
-    depending on the filesystem, neither of which points at journal mode.
-
-    So: try read-only, then fall back to `immutable=1`, which tells SQLite the
-    file will not change underneath it and skips the WAL machinery entirely.
-
-    Be clear about what that fallback costs. `immutable=1` is a promise, and if
-    the file IS being written through some other path while we read it, SQLite
-    has been told it may skip the locking that would have caught it -- the
-    result can be a torn read or SQLITE_CORRUPT rather than a clean error. The
-    fallback is only reached once an honest read-only open has already failed,
-    so a writable database never takes this path, and it is logged when it
-    does. The setup it is really there for is a mount that cannot change:
-    point FRIGATE_DB at a `.backup` copy and this never fires.
-
-    connect() is lazy, so the failure surfaces on the first statement rather
-    than on the open. Probe with a cheap query instead of trusting the handle.
+    Falls back to `immutable=1` when Frigate's WAL files are missing on a read-only mount (it ignores the WAL).
     """
     last = None
-    for uri in ("file:%s?mode=ro" % path, "file:%s?mode=ro&immutable=1" % path):
+    base = Path(path).absolute().as_uri()
+    for uri in (base + "?mode=ro", base + "?mode=ro&immutable=1"):
         try:
             conn = sqlite3.connect(uri, uri=True)
-            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()
+            conn.execute("SELECT 1 FROM sqlite_master LIMIT 1").fetchone()  # connect() is lazy
             if "immutable" in uri:
-                _log("  WARNING: %s could not be opened read-only (%s), fell back to "
-                     "immutable=1. Reads are only trustworthy if nothing is writing to "
-                     "it. Prefer a `.backup` copy in journal_mode=DELETE." % (path, last))
+                _log("  WARNING: %s could not be opened read-only (%s), fell back to immutable=1. "
+                     "Reads are only trustworthy if nothing is writing to it. "
+                     "Prefer a `.backup` copy in journal_mode=DELETE." % (path, last))
             return conn
         except sqlite3.Error as e:
             last = e
@@ -93,11 +72,8 @@ def _frigate_db_error(path, exc):
     """Turn a bare sqlite3 error on the Frigate DB into something actionable."""
     return (
         "Could not read the Frigate database at %s: %s. "
-        "If it is on a read-only mount and Frigate has it in WAL mode, SQLite "
-        "cannot create the -shm file it needs beside it. Either mount the "
-        "directory read-write, or point FRIGATE_DB at a copy made with "
-        "`sqlite3 SOURCE \".backup DEST\"` followed by "
-        "`sqlite3 DEST 'PRAGMA journal_mode=DELETE;'`."
+        "If it is on a read-only mount and Frigate has it in WAL mode, SQLite needs the -wal and -shm files Frigate keeps beside it while running. "
+        "Make sure you mount the directory that holds frigate.db (not the file itself) and that Frigate is running, or point FRIGATE_DB at a copy made with `sqlite3 SOURCE \".backup DEST\"` followed by `sqlite3 DEST 'PRAGMA journal_mode=DELETE;'`."
     ) % (path, exc)
 
 
