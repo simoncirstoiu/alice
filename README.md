@@ -170,10 +170,12 @@ volumes:
   - /path/to/models:/app/models
   - /path/to/frigate/clips:/app/clips:ro
   - /path/to/frigate/exports:/app/exports:ro
-  - /path/to/frigate/frigate.db:/app/frigate.db:ro
+  - /path/to/frigate:/app/frigate:ro
 ```
 
-> **Important:** The `frigate.db` volume must point to the actual **file**, not a directory. If the file doesn't exist on the host at the time of container creation, Docker will create a directory instead and ALICE won't be able to open the database.
+Then set `FRIGATE_DB = /app/frigate/frigate.db` in Settings.
+
+> **Important:** mount the **directory** that holds `frigate.db`, not the file. A single-file bind mount is pinned to one inode, so anything that replaces the database by rename — a `.backup` copy published on a timer, say — leaves the container reading the old inode and failing with `Stale file handle` until it is recreated. Mounting the directory also avoids Docker creating an empty directory in place of a file that does not exist yet at container-creation time.
 
 Then start:
 
