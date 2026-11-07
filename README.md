@@ -260,7 +260,7 @@ Need help or want to chat? Join Alice Discord:
 
 ## License
 
-[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — free for personal, non-commercial use. For commercial licensing, contact alice@it-link.net.
+[PolyForm Noncommercial 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — free for personal, non-commercial use. For commercial licensing, contact alice@it-link.net.
 
 
 ## Author
